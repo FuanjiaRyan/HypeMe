@@ -28,7 +28,7 @@ class ChooseScreen extends StatelessWidget {
                 const Spacer(flex: 2),
                 // Logo icon
                 Image.asset(
-                  'assets/icons/hypeicon.png',
+                  'assets/icons/hype.jpg',
                   width: 100,
                   height: 100,
                   fit: BoxFit.contain,

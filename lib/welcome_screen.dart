@@ -25,7 +25,7 @@ class WelcomeScreen extends StatelessWidget {
               const Spacer(flex: 2),
               // Logo icon
               Image.asset(
-                'assets/icons/hypeicon.png',
+                'assets/icons/hype.jpg',
                 width: 120,
                 height: 120,
                 fit: BoxFit.contain,
