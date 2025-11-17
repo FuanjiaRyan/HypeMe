@@ -420,7 +420,9 @@ class HomeScreen extends StatelessWidget {
   void _showAllArtistsPosts(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => const AllArtistPostScreen()),
+      MaterialPageRoute(
+        builder: (context) => const AllArtistPostScreen(showBackButton: true),
+      ),
     );
   }
 }
@@ -888,40 +890,21 @@ class WalletScreen extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               // Action buttons
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () {},
-                      icon: const Icon(Icons.add),
-                      label: const Text('Deposit'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF00B4FF),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {},
+                  icon: const Icon(Icons.arrow_upward),
+                  label: const Text('Withdraw'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.grey[900],
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () {},
-                      icon: const Icon(Icons.arrow_upward),
-                      label: const Text('Withdraw'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.grey[900],
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
               const SizedBox(height: 32),
               const Text(

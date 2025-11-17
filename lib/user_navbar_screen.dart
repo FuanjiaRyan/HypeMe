@@ -12,7 +12,7 @@ class _UserNavbarScreenState extends State<UserNavbarScreen> {
   int _currentIndex = 0;
 
   final List<Widget> _screens = [
-    const AllArtistPostScreen(),
+    const AllArtistPostScreen(showBackButton: false), // Home page - no back button
     const ExploreScreen(),
     const UserWalletScreen(),
     const UserProfileScreen(),
@@ -146,7 +146,7 @@ class UserHomeScreen extends StatelessWidget {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => const AllArtistPostScreen(),
+                                  builder: (context) => const AllArtistPostScreen(showBackButton: true),
                                 ),
                               );
                             },
@@ -229,7 +229,7 @@ class UserHomeScreen extends StatelessWidget {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => const AllArtistPostScreen(),
+                                builder: (context) => const AllArtistPostScreen(showBackButton: true),
                               ),
                             );
                           },
@@ -350,7 +350,7 @@ class ExploreScreen extends StatelessWidget {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => const AllArtistPostScreen(),
+                          builder: (context) => const AllArtistPostScreen(showBackButton: true),
                         ),
                       );
                     },

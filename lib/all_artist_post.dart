@@ -2,7 +2,14 @@ import 'package:flutter/material.dart';
 import 'dart:math' as math;
 
 class AllArtistPostScreen extends StatefulWidget {
-  const AllArtistPostScreen({super.key});
+  final bool? _showBackButton;
+  
+  const AllArtistPostScreen({
+    super.key,
+    bool? showBackButton,
+  }) : _showBackButton = showBackButton;
+  
+  bool get showBackButton => _showBackButton ?? true;
 
   @override
   State<AllArtistPostScreen> createState() => _AllArtistPostScreenState();
@@ -61,7 +68,12 @@ class _AllArtistPostScreenState extends State<AllArtistPostScreen>
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const SizedBox(width: 48), // Spacer to center title
+                      widget.showBackButton
+                          ? IconButton(
+                              icon: const Icon(Icons.arrow_back, color: Colors.white),
+                              onPressed: () => Navigator.pop(context),
+                            )
+                          : const SizedBox(width: 48), // Spacer to center title
                       const Text(
                         'Synthwave Dreams',
                         style: TextStyle(
