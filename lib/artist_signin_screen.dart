@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
+import 'bottom_navbar_screen.dart';
 
 class ArtistSignInScreen extends StatefulWidget {
   const ArtistSignInScreen({super.key});
@@ -454,11 +455,13 @@ class _ArtistSignInScreenState extends State<ArtistSignInScreen> {
                     child: ElevatedButton(
                       onPressed: () {
                         if (_formKey.currentState!.validate()) {
-                          // Handle form submission
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Profile completed successfully!'),
+                          // Navigate to bottom navbar screen
+                          Navigator.pushAndRemoveUntil(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const BottomNavbarScreen(),
                             ),
+                            (route) => false, // Remove all previous routes
                           );
                         }
                       },
