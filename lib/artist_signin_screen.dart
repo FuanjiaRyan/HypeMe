@@ -12,6 +12,8 @@ class ArtistSignInScreen extends StatefulWidget {
 
 class _ArtistSignInScreenState extends State<ArtistSignInScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   final _artistNameController = TextEditingController();
   final _shortBioController = TextEditingController();
   final _instagramController = TextEditingController();
@@ -19,12 +21,15 @@ class _ArtistSignInScreenState extends State<ArtistSignInScreen> {
   
   File? _profilePicture;
   final int _maxBioLength = 150;
+  bool _obscurePassword = true;
   
   // Additional social media fields
   final List<Map<String, dynamic>> _additionalSocials = [];
 
   @override
   void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
     _artistNameController.dispose();
     _shortBioController.dispose();
     _instagramController.dispose();
@@ -37,7 +42,13 @@ class _ArtistSignInScreenState extends State<ArtistSignInScreen> {
 
   double _calculateProgress() {
     int completedFields = 0;
-    int totalFields = 4; // Profile picture, Artist name, Short bio, Social links
+    int totalFields = 6; // Email, Password, Profile picture, Artist name, Short bio, Social links
+    
+    // Email
+    if (_emailController.text.trim().isNotEmpty) completedFields++;
+    
+    // Password
+    if (_passwordController.text.trim().isNotEmpty) completedFields++;
     
     // Profile picture (optional but counts if added)
     if (_profilePicture != null) completedFields++;
@@ -252,6 +263,99 @@ class _ArtistSignInScreenState extends State<ArtistSignInScreen> {
                     ),
                   ),
                   const SizedBox(height: 32),
+                  // Email field
+                  const Text(
+                    'Email',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    style: const TextStyle(color: Colors.white),
+                    onChanged: (_) => setState(() {}), // Update progress
+                    decoration: InputDecoration(
+                      hintText: 'e.g., artist@example.com',
+                      hintStyle: TextStyle(color: Colors.grey[400]),
+                      filled: true,
+                      fillColor: Colors.grey[900],
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 16,
+                      ),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter your email';
+                      }
+                      if (!value.contains('@')) {
+                        return 'Please enter a valid email';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 24),
+                  // Password field
+                  const Text(
+                    'Password',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: _passwordController,
+                    obscureText: _obscurePassword,
+                    style: const TextStyle(color: Colors.white),
+                    onChanged: (_) => setState(() {}), // Update progress
+                    decoration: InputDecoration(
+                      hintText: '********',
+                      hintStyle: TextStyle(color: Colors.grey[400]),
+                      filled: true,
+                      fillColor: Colors.grey[900],
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 16,
+                      ),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                          color: Colors.grey[400],
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _obscurePassword = !_obscurePassword;
+                          });
+                        },
+                      ),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter your password';
+                      }
+                      if (value.length < 6) {
+                        return 'Password must be at least 6 characters';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 24),
                   // Artist Name field
                   const Text(
                     'Artist Name',

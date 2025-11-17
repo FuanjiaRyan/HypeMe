@@ -61,10 +61,7 @@ class _AllArtistPostScreenState extends State<AllArtistPostScreen>
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      IconButton(
-                        icon: const Icon(Icons.arrow_back, color: Colors.white),
-                        onPressed: () => Navigator.pop(context),
-                      ),
+                      const SizedBox(width: 48), // Spacer to center title
                       const Text(
                         'Synthwave Dreams',
                         style: TextStyle(

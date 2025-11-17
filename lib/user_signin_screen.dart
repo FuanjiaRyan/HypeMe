@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'user_navbar_screen.dart';
 
 class UserSignInScreen extends StatefulWidget {
   const UserSignInScreen({super.key});
@@ -11,8 +12,9 @@ class _UserSignInScreenState extends State<UserSignInScreen> {
   final _formKey = GlobalKey<FormState>();
   final _fullNameController = TextEditingController();
   final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   String? _selectedCountry;
-  String? _selectedMobileMoney;
+  bool _obscurePassword = true;
 
   // List of all countries
   final List<String> _countries = [
@@ -48,15 +50,12 @@ class _UserSignInScreenState extends State<UserSignInScreen> {
     'Venezuela', 'Vietnam', 'Yemen', 'Zambia', 'Zimbabwe'
   ];
 
-  final List<String> _mobileMoneyOptions = [
-    'MTN Mobile Money',
-    'Orange Cameroon',
-  ];
 
   @override
   void dispose() {
     _fullNameController.dispose();
     _emailController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 
@@ -223,9 +222,9 @@ class _UserSignInScreenState extends State<UserSignInScreen> {
                     },
                   ),
                   const SizedBox(height: 24),
-                  // Preferred Mobile Money dropdown
+                  // Password field
                   const Text(
-                    'Preferred Mobile Money',
+                    'Password',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 16,
@@ -233,9 +232,13 @@ class _UserSignInScreenState extends State<UserSignInScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    value: _selectedMobileMoney,
+                  TextFormField(
+                    controller: _passwordController,
+                    obscureText: _obscurePassword,
+                    style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
+                      hintText: '********',
+                      hintStyle: TextStyle(color: Colors.grey[400]),
                       filled: true,
                       fillColor: Colors.grey[900],
                       border: OutlineInputBorder(
@@ -246,28 +249,26 @@ class _UserSignInScreenState extends State<UserSignInScreen> {
                         horizontal: 16,
                         vertical: 16,
                       ),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                          color: Colors.grey[400],
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _obscurePassword = !_obscurePassword;
+                          });
+                        },
+                      ),
                     ),
-                    dropdownColor: Colors.grey[900],
-                    style: const TextStyle(color: Colors.white),
-                    icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
-                    hint: const Text(
-                      'Select Mobile Money',
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                    items: _mobileMoneyOptions.map((String option) {
-                      return DropdownMenuItem<String>(
-                        value: option,
-                        child: Text(option, style: const TextStyle(color: Colors.white)),
-                      );
-                    }).toList(),
-                    onChanged: (String? newValue) {
-                      setState(() {
-                        _selectedMobileMoney = newValue;
-                      });
-                    },
                     validator: (value) {
                       if (value == null || value.isEmpty) {
-                        return 'Please select a mobile money option';
+                        return 'Please enter your password';
+                      }
+                      if (value.length < 6) {
+                        return 'Password must be at least 6 characters';
                       }
                       return null;
                     },
@@ -278,14 +279,30 @@ class _UserSignInScreenState extends State<UserSignInScreen> {
                     width: double.infinity,
                     height: 56,
                     child: ElevatedButton(
-                      onPressed: () {
+                      onPressed: () async {
+                        // Validate form first
                         if (_formKey.currentState!.validate()) {
-                          // Handle form submission
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Account created successfully!'),
-                            ),
-                          );
+                          // Navigate to user navbar screen
+                          if (mounted) {
+                            Navigator.pushAndRemoveUntil(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const UserNavbarScreen(),
+                              ),
+                              (route) => false, // Remove all previous routes
+                            );
+                          }
+                        } else {
+                          // Show error message if validation fails
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Please fill in all required fields'),
+                                backgroundColor: Colors.red,
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          }
                         }
                       },
                       style: ElevatedButton.styleFrom(
