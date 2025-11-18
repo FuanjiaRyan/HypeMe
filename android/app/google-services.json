@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "251688077288",
+    "project_id": "upheld-caldron-465808-c2",
+    "storage_bucket": "upheld-caldron-465808-c2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:251688077288:android:a0874ddd7803a33f70465d",
+        "android_client_info": {
+          "package_name": "com.example.hype_me"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAi5eir7GR2iyhAaWLgK8fXyqFg4acK_-c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:251688077288:android:9198cfd4e46a14c770465d",
+        "android_client_info": {
+          "package_name": "com.puzo.ryan_store_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAi5eir7GR2iyhAaWLgK8fXyqFg4acK_-c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

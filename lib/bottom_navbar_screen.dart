@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'all_artist_post.dart';
+import 'choose_screen.dart';
+import 'artist_edit_profile_screen.dart';
 
 class BottomNavbarScreen extends StatefulWidget {
   const BottomNavbarScreen({super.key});
@@ -999,243 +1004,448 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final User? user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      return Container(
+        decoration: const BoxDecoration(color: Color(0xFF0A0E27)),
+        child: const Center(
+          child: Text('Please sign in', style: TextStyle(color: Colors.white)),
+        ),
+      );
+    }
+
     return Container(
       decoration: const BoxDecoration(color: Color(0xFF0A0E27)),
       child: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            SliverAppBar(
-              expandedHeight: 200,
-              floating: false,
-              pinned: true,
-              backgroundColor: const Color(0xFF0A0E27),
-              flexibleSpace: FlexibleSpaceBar(
-                background: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        const Color(0xFF0A0E27),
-                        const Color(0xFF1A0F2E),
-                      ],
-                    ),
-                  ),
+        child: StreamBuilder<DocumentSnapshot>(
+          stream:
+              FirebaseFirestore.instance
+                  .collection('artist')
+                  .doc(user.uid)
+                  .snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00B4FF)),
                 ),
-                centerTitle: true,
-                title: const Text(
-                  'Profile',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
+              );
+            }
+
+            if (!snapshot.hasData || !snapshot.data!.exists) {
+              return const Center(
+                child: Text(
+                  'Profile not found',
+                  style: TextStyle(color: Colors.white),
                 ),
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  children: [
-                    Container(
-                      width: 100,
-                      height: 100,
+              );
+            }
+
+            final artistData = snapshot.data!.data() as Map<String, dynamic>;
+            final profileImageUrl = artistData['profileImageUrl'] as String?;
+            final artistName =
+                artistData['artistName'] as String? ?? 'Artist Name';
+            final email = artistData['email'] as String? ?? '';
+            final bio = artistData['bio'] as String? ?? '';
+
+            return CustomScrollView(
+              slivers: [
+                SliverAppBar(
+                  expandedHeight: 200,
+                  floating: false,
+                  pinned: true,
+                  backgroundColor: const Color(0xFF0A0E27),
+                  flexibleSpace: FlexibleSpaceBar(
+                    background: Container(
                       decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.grey[800],
-                        border: Border.all(
-                          color: const Color(0xFF00B4FF),
-                          width: 3,
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            const Color(0xFF0A0E27),
+                            const Color(0xFF1A0F2E),
+                          ],
                         ),
                       ),
-                      child: const Icon(
-                        Icons.person,
-                        color: Colors.white,
-                        size: 50,
-                      ),
                     ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Artist Name',
+                    centerTitle: true,
+                    title: const Text(
+                      'Profile',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '@artist_handle',
-                      style: TextStyle(color: Colors.grey[400], fontSize: 16),
-                    ),
-                    const SizedBox(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
                       children: [
-                        _buildStatColumn('Followers', '1.2K'),
-                        _buildStatColumn('Following', '450'),
-                        _buildStatColumn('Posts', '89'),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    // Bio Section
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[900],
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Bio',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
+                        // Profile Picture
+                        Container(
+                          width: 100,
+                          height: 100,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.grey[800],
+                            border: Border.all(
+                              color: const Color(0xFF00B4FF),
+                              width: 3,
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Creative artist passionate about music, visuals, and digital art. Sharing my journey and connecting with fellow creators. 🎨🎵✨',
-                            style: TextStyle(
-                              color: Colors.grey[300],
-                              fontSize: 14,
-                              height: 1.5,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-                    _buildProfileButton(
-                      icon: Icons.edit,
-                      title: 'Edit Profile',
-                      onTap: () {},
-                    ),
-                    const SizedBox(height: 12),
-                    _buildProfileButton(
-                      icon: Icons.settings,
-                      title: 'Settings',
-                      onTap: () {},
-                    ),
-                    const SizedBox(height: 12),
-                    _buildProfileButton(
-                      icon: Icons.help_outline,
-                      title: 'Help & Support',
-                      onTap: () {},
-                    ),
-                    const SizedBox(height: 12),
-                    _buildProfileButton(
-                      icon: Icons.logout,
-                      title: 'Logout',
-                      onTap: () {},
-                    ),
-                    const SizedBox(height: 32),
-                    // Artist Posts Section
-                    const Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
+                          child:
+                              profileImageUrl != null &&
+                                      profileImageUrl.isNotEmpty
+                                  ? GestureDetector(
+                                    onTap: () {
+                                      _showFullScreenImage(
+                                        context,
+                                        profileImageUrl,
+                                      );
+                                    },
+                                    child: ClipOval(
+                                      child: Image.network(
+                                        profileImageUrl,
+                                        fit: BoxFit.cover,
+                                        width: 100,
+                                        height: 100,
+                                        loadingBuilder: (
+                                          context,
+                                          child,
+                                          loadingProgress,
+                                        ) {
+                                          if (loadingProgress == null)
+                                            return child;
+                                          return Container(
+                                            color: Colors.grey[800],
+                                            child: Center(
+                                              child: CircularProgressIndicator(
+                                                value:
+                                                    loadingProgress
+                                                                .expectedTotalBytes !=
+                                                            null
+                                                        ? loadingProgress
+                                                                .cumulativeBytesLoaded /
+                                                            loadingProgress
+                                                                .expectedTotalBytes!
+                                                        : null,
+                                                strokeWidth: 3,
+                                                valueColor:
+                                                    const AlwaysStoppedAnimation<
+                                                      Color
+                                                    >(Color(0xFF00B4FF)),
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                        errorBuilder: (
+                                          context,
+                                          error,
+                                          stackTrace,
+                                        ) {
+                                          // If network image fails, try CachedNetworkImage as fallback
+                                          return CachedNetworkImage(
+                                            imageUrl: profileImageUrl,
+                                            fit: BoxFit.cover,
+                                            width: 100,
+                                            height: 100,
+                                            placeholder:
+                                                (context, url) => Container(
+                                                  color: Colors.grey[800],
+                                                  child: const Center(
+                                                    child: SizedBox(
+                                                      width: 30,
+                                                      height: 30,
+                                                      child: CircularProgressIndicator(
+                                                        strokeWidth: 3,
+                                                        valueColor:
+                                                            AlwaysStoppedAnimation<
+                                                              Color
+                                                            >(
+                                                              Color(0xFF00B4FF),
+                                                            ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                            errorWidget:
+                                                (context, url, error) =>
+                                                    const Icon(
+                                                      Icons.person,
+                                                      color: Colors.white,
+                                                      size: 50,
+                                                    ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  )
+                                  : const Icon(
+                                    Icons.person,
+                                    color: Colors.white,
+                                    size: 50,
+                                  ),
+                        ),
+                        const SizedBox(height: 16),
+                        // Artist Name
                         Text(
-                          'My Posts',
-                          style: TextStyle(
+                          artistName,
+                          style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 20,
+                            fontSize: 24,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
+                        const SizedBox(height: 8),
+                        // Email
                         Text(
-                          'View All',
+                          email,
                           style: TextStyle(
-                            color: Color(0xFF00B4FF),
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[400],
+                            fontSize: 16,
                           ),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    // Posts Grid
-                    GridView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 3,
-                            crossAxisSpacing: 8,
-                            mainAxisSpacing: 8,
-                            childAspectRatio: 1,
-                          ),
-                      itemCount: 9,
-                      itemBuilder: (context, index) {
-                        return Container(
+                        const SizedBox(height: 24),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            _buildStatColumn('Followers', '1.2K'),
+                            _buildStatColumn('Following', '450'),
+                            _buildStatColumn('Posts', '89'),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        // Bio Section
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: Colors.grey[800],
-                            borderRadius: BorderRadius.circular(8),
+                            color: Colors.grey[900],
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                          child: Stack(
-                            fit: StackFit.expand,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Placeholder for post image/video
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: Container(
-                                  color: Colors.grey[700],
-                                  child: const Icon(
-                                    Icons.play_circle_outline,
-                                    color: Colors.white,
-                                    size: 40,
-                                  ),
+                              const Text(
+                                'Bio',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
-                              // Overlay with engagement info
-                              Positioned(
-                                bottom: 4,
-                                left: 4,
-                                right: 4,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.6),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(
-                                        Icons.play_arrow,
-                                        color: Colors.white,
-                                        size: 12,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        '${(index + 1) * 25}',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                              const SizedBox(height: 8),
+                              Text(
+                                bio.isNotEmpty ? bio : 'No bio available',
+                                style: TextStyle(
+                                  color:
+                                      bio.isNotEmpty
+                                          ? Colors.grey[300]
+                                          : Colors.grey[500],
+                                  fontSize: 14,
+                                  height: 1.5,
                                 ),
                               ),
                             ],
                           ),
-                        );
-                      },
+                        ),
+                        const SizedBox(height: 32),
+                        _buildProfileButton(
+                          icon: Icons.edit,
+                          title: 'Edit Profile',
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder:
+                                    (context) =>
+                                        const ArtistEditProfileScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        _buildProfileButton(
+                          icon: Icons.settings,
+                          title: 'Settings',
+                          onTap: () {},
+                        ),
+                        const SizedBox(height: 12),
+                        _buildProfileButton(
+                          icon: Icons.help_outline,
+                          title: 'Help & Support',
+                          onTap: () {},
+                        ),
+                        const SizedBox(height: 12),
+                        _buildProfileButton(
+                          icon: Icons.logout,
+                          title: 'Logout',
+                          onTap: () async {
+                            // Show confirmation dialog
+                            final shouldLogout = await showDialog<bool>(
+                              context: context,
+                              builder: (BuildContext context) {
+                                return AlertDialog(
+                                  backgroundColor: Colors.grey[900],
+                                  title: const Text(
+                                    'Logout',
+                                    style: TextStyle(color: Colors.white),
+                                  ),
+                                  content: const Text(
+                                    'Are you sure you want to logout?',
+                                    style: TextStyle(color: Colors.white70),
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed:
+                                          () =>
+                                              Navigator.of(context).pop(false),
+                                      child: const Text(
+                                        'Cancel',
+                                        style: TextStyle(color: Colors.grey),
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed:
+                                          () => Navigator.of(context).pop(true),
+                                      child: const Text(
+                                        'Logout',
+                                        style: TextStyle(
+                                          color: Color(0xFF00B4FF),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
+                            );
+
+                            if (shouldLogout == true) {
+                              // Sign out from Firebase
+                              await FirebaseAuth.instance.signOut();
+
+                              // Navigate to ChooseScreen and remove all previous routes
+                              if (context.mounted) {
+                                Navigator.pushAndRemoveUntil(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const ChooseScreen(),
+                                  ),
+                                  (route) =>
+                                      false, // Remove all previous routes
+                                );
+                              }
+                            }
+                          },
+                        ),
+                        const SizedBox(height: 32),
+                        // Artist Posts Section
+                        const Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'My Posts',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              'View All',
+                              style: TextStyle(
+                                color: Color(0xFF00B4FF),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        // Posts Grid
+                        GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 3,
+                                crossAxisSpacing: 8,
+                                mainAxisSpacing: 8,
+                                childAspectRatio: 1,
+                              ),
+                          itemCount: 9,
+                          itemBuilder: (context, index) {
+                            return Container(
+                              decoration: BoxDecoration(
+                                color: Colors.grey[800],
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  // Placeholder for post image/video
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Container(
+                                      color: Colors.grey[700],
+                                      child: const Icon(
+                                        Icons.play_circle_outline,
+                                        color: Colors.white,
+                                        size: 40,
+                                      ),
+                                    ),
+                                  ),
+                                  // Overlay with engagement info
+                                  Positioned(
+                                    bottom: 4,
+                                    left: 4,
+                                    right: 4,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withOpacity(0.6),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(
+                                            Icons.play_arrow,
+                                            color: Colors.white,
+                                            size: 12,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            '${(index + 1) * 25}',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-          ],
+              ],
+            );
+          },
         ),
       ),
     );
@@ -1255,6 +1465,15 @@ class ProfileScreen extends StatelessWidget {
         const SizedBox(height: 4),
         Text(label, style: TextStyle(color: Colors.grey[400], fontSize: 14)),
       ],
+    );
+  }
+
+  void _showFullScreenImage(BuildContext context, String imageUrl) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => _FullScreenImagePage(imageUrl: imageUrl),
+        fullscreenDialog: true,
+      ),
     );
   }
 
@@ -1444,6 +1663,77 @@ class AllArtistsPostsScreen extends StatelessWidget {
           const SizedBox(width: 8),
           Text(label, style: TextStyle(color: Colors.grey[400], fontSize: 14)),
         ],
+      ),
+    );
+  }
+}
+
+// Full Screen Image Viewer
+class _FullScreenImagePage extends StatelessWidget {
+  final String imageUrl;
+
+  const _FullScreenImagePage({required this.imageUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        iconTheme: const IconThemeData(color: Colors.white),
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
+      body: Center(
+        child: InteractiveViewer(
+          minScale: 0.5,
+          maxScale: 4.0,
+          child: Image.network(
+            imageUrl,
+            fit: BoxFit.contain,
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return Center(
+                child: CircularProgressIndicator(
+                  value:
+                      loadingProgress.expectedTotalBytes != null
+                          ? loadingProgress.cumulativeBytesLoaded /
+                              loadingProgress.expectedTotalBytes!
+                          : null,
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    Color(0xFF00B4FF),
+                  ),
+                ),
+              );
+            },
+            errorBuilder: (context, error, stackTrace) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      color: Colors.white,
+                      size: 64,
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Failed to load image',
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Close'),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
       ),
     );
   }

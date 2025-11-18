@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'user_navbar_screen.dart';
+import 'user_login_screen.dart';
 
 class UserSignInScreen extends StatefulWidget {
   const UserSignInScreen({super.key});
@@ -15,6 +21,8 @@ class _UserSignInScreenState extends State<UserSignInScreen> {
   final _passwordController = TextEditingController();
   String? _selectedCountry;
   bool _obscurePassword = true;
+  File? _profilePicture;
+  bool _isUploading = false;
 
   // List of all countries
   final List<String> _countries = [
@@ -59,6 +67,170 @@ class _UserSignInScreenState extends State<UserSignInScreen> {
     super.dispose();
   }
 
+  Future<void> _pickProfilePicture() async {
+    final ImagePicker picker = ImagePicker();
+    
+    // Show dialog to choose between camera and gallery
+    final ImageSource? source = await showDialog<ImageSource>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: Colors.grey[900],
+          title: const Text(
+            'Select Image Source',
+            style: TextStyle(color: Colors.white),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.camera_alt, color: Colors.white),
+                title: const Text(
+                  'Camera',
+                  style: TextStyle(color: Colors.white),
+                ),
+                onTap: () => Navigator.pop(context, ImageSource.camera),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library, color: Colors.white),
+                title: const Text(
+                  'Gallery',
+                  style: TextStyle(color: Colors.white),
+                ),
+                onTap: () => Navigator.pop(context, ImageSource.gallery),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (source != null) {
+      try {
+        final XFile? pickedFile = await picker.pickImage(
+          source: source,
+          imageQuality: 85,
+          maxWidth: 800,
+          maxHeight: 800,
+        );
+
+        if (pickedFile != null) {
+          setState(() {
+            _profilePicture = File(pickedFile.path);
+          });
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error picking image: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<String?> _uploadProfilePicture() async {
+    if (_profilePicture == null) {
+      return null; // No image to upload
+    }
+
+    try {
+      // Get a reference to the storage location
+      final storageRef = FirebaseStorage.instance.ref();
+      
+      // Get file extension from the path
+      final String fileExtension = _profilePicture!.path.split('.').last;
+      
+      // Create a unique filename using timestamp
+      final String fileName = '${DateTime.now().millisecondsSinceEpoch}.$fileExtension';
+      
+      // Reference to the file location in Firebase Storage
+      final profilePicRef = storageRef.child('usersprofiles/$fileName');
+
+      // Upload the file
+      await profilePicRef.putFile(_profilePicture!);
+
+      // Get the download URL
+      final String downloadUrl = await profilePicRef.getDownloadURL();
+
+      return downloadUrl;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error uploading profile picture: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      return null;
+    }
+  }
+
+  Future<bool> _saveUserProfile(String? imageUrl) async {
+    try {
+      // Create Firebase Auth account
+      final UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
+
+      // Prepare data to save to Firestore
+      final Map<String, dynamic> userData = {
+        'fullName': _fullNameController.text.trim(),
+        'email': _emailController.text.trim(),
+        'password': _passwordController.text.trim(), // Note: Storing password in Firestore is not recommended for production
+        'country': _selectedCountry ?? '',
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      // Add image URL if available
+      if (imageUrl != null) {
+        userData['profileImageUrl'] = imageUrl;
+      }
+
+      // Save to Firestore in the 'users' collection
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userCredential.user!.uid)
+          .set(userData);
+
+      return true;
+    } catch (e) {
+      if (mounted) {
+        String errorMessage = 'Error saving profile: $e';
+        if (e is FirebaseAuthException) {
+          switch (e.code) {
+            case 'weak-password':
+              errorMessage = 'The password provided is too weak.';
+              break;
+            case 'email-already-in-use':
+              errorMessage = 'An account already exists for that email.';
+              break;
+            case 'invalid-email':
+              errorMessage = 'The email address is invalid.';
+              break;
+            default:
+              errorMessage = 'Error creating account: ${e.message}';
+          }
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      return false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -95,6 +267,63 @@ class _UserSignInScreenState extends State<UserSignInScreen> {
                     style: TextStyle(
                       color: Colors.grey,
                       fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  // Profile Picture Section
+                  Center(
+                    child: Column(
+                      children: [
+                        GestureDetector(
+                          onTap: _pickProfilePicture,
+                          child: Container(
+                            width: 100,
+                            height: 100,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Colors.grey,
+                                width: 2,
+                                style: BorderStyle.solid,
+                              ),
+                              color: Colors.grey[900],
+                            ),
+                            child: _profilePicture != null
+                                ? ClipOval(
+                                    child: Image.file(
+                                      _profilePicture!,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.add_a_photo,
+                                    color: Colors.white,
+                                    size: 40,
+                                  ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Profile Picture',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        GestureDetector(
+                          onTap: _pickProfilePicture,
+                          child: const Text(
+                            'Tap to upload',
+                            style: TextStyle(
+                              color: Color(0xFF00B4FF),
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 32),
@@ -279,18 +508,45 @@ class _UserSignInScreenState extends State<UserSignInScreen> {
                     width: double.infinity,
                     height: 56,
                     child: ElevatedButton(
-                      onPressed: () async {
+                      onPressed: _isUploading ? null : () async {
                         // Validate form first
                         if (_formKey.currentState!.validate()) {
-                          // Navigate to user navbar screen
-                          if (mounted) {
-                            Navigator.pushAndRemoveUntil(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const UserNavbarScreen(),
-                              ),
-                              (route) => false, // Remove all previous routes
-                            );
+                          setState(() {
+                            _isUploading = true;
+                          });
+
+                          String? imageUrl;
+
+                          // Upload profile picture if one is selected
+                          if (_profilePicture != null) {
+                            imageUrl = await _uploadProfilePicture();
+                            if (imageUrl == null) {
+                              // Upload failed, don't proceed
+                              setState(() {
+                                _isUploading = false;
+                              });
+                              return;
+                            }
+                          }
+
+                          // Save user profile to Firestore
+                          final success = await _saveUserProfile(imageUrl);
+                          
+                          setState(() {
+                            _isUploading = false;
+                          });
+
+                          if (success) {
+                            // Navigate to user navbar screen
+                            if (mounted) {
+                              Navigator.pushAndRemoveUntil(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const UserNavbarScreen(),
+                                ),
+                                (route) => false, // Remove all previous routes
+                              );
+                            }
                           }
                         } else {
                           // Show error message if validation fails
@@ -312,15 +568,57 @@ class _UserSignInScreenState extends State<UserSignInScreen> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                         elevation: 0,
+                        disabledBackgroundColor: Colors.grey[700],
                       ),
-                      child: const Text(
-                        'Create Account',
+                      child: _isUploading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : const Text(
+                              'Create Account',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // Already have an account link
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Already have an account? ',
                         style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
+                          color: Colors.grey[400],
+                          fontSize: 14,
                         ),
                       ),
-                    ),
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const UserLoginScreen(),
+                            ),
+                          );
+                        },
+                        child: const Text(
+                          'Sign In',
+                          style: TextStyle(
+                            color: Color(0xFF00B4FF),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 24),
                   // Terms and Privacy Policy

@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'bottom_navbar_screen.dart';
+import 'artist_login_screen.dart';
 
 class ArtistSignInScreen extends StatefulWidget {
   const ArtistSignInScreen({super.key});
@@ -22,6 +26,7 @@ class _ArtistSignInScreenState extends State<ArtistSignInScreen> {
   File? _profilePicture;
   final int _maxBioLength = 150;
   bool _obscurePassword = true;
+  bool _isUploading = false;
   
   // Additional social media fields
   final List<Map<String, dynamic>> _additionalSocials = [];
@@ -141,6 +146,128 @@ class _ArtistSignInScreenState extends State<ArtistSignInScreen> {
         'controller': TextEditingController(),
       });
     });
+  }
+
+  Future<String?> _uploadProfilePicture() async {
+    if (_profilePicture == null) {
+      return null; // No image to upload
+    }
+
+    try {
+      // Get a reference to the storage location
+      final storageRef = FirebaseStorage.instance.ref();
+      
+      // Get file extension from the path
+      final String fileExtension = _profilePicture!.path.split('.').last;
+      
+      // Create a unique filename using timestamp
+      final String fileName = '${DateTime.now().millisecondsSinceEpoch}.$fileExtension';
+      
+      // Reference to the file location in Firebase Storage
+      final profilePicRef = storageRef.child('artistProfiles/$fileName');
+
+      // Upload the file
+      await profilePicRef.putFile(_profilePicture!);
+
+      // Get the download URL
+      final String downloadUrl = await profilePicRef.getDownloadURL();
+
+      return downloadUrl;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error uploading profile picture: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      return null;
+    }
+  }
+
+  Future<bool> _saveArtistProfile(String? imageUrl) async {
+    try {
+      // Create Firebase Auth account
+      final UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
+
+      // Prepare data to save to Firestore
+      final Map<String, dynamic> artistData = {
+        'email': _emailController.text.trim(),
+        'password': _passwordController.text.trim(), // Note: Storing password in Firestore is not recommended for production
+        'artistName': _artistNameController.text.trim(),
+        'bio': _shortBioController.text.trim(),
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      // Add image URL if available
+      if (imageUrl != null) {
+        artistData['profileImageUrl'] = imageUrl;
+      }
+
+      // Add social media links if available
+      if (_instagramController.text.trim().isNotEmpty) {
+        artistData['instagram'] = _instagramController.text.trim();
+      }
+      if (_twitterController.text.trim().isNotEmpty) {
+        artistData['twitter'] = _twitterController.text.trim();
+      }
+
+      // Add additional social media links
+      final List<Map<String, String>> additionalSocials = [];
+      for (var social in _additionalSocials) {
+        final controller = social['controller'] as TextEditingController?;
+        if (controller != null && controller.text.trim().isNotEmpty) {
+          additionalSocials.add({
+            'platform': social['platform'] ?? 'Social Media',
+            'username': controller.text.trim(),
+          });
+        }
+      }
+      if (additionalSocials.isNotEmpty) {
+        artistData['additionalSocials'] = additionalSocials;
+      }
+
+      // Save to Firestore in the 'artist' collection
+      await FirebaseFirestore.instance
+          .collection('artist')
+          .doc(userCredential.user!.uid)
+          .set(artistData);
+
+      return true;
+    } catch (e) {
+      if (mounted) {
+        String errorMessage = 'Error saving profile: $e';
+        if (e is FirebaseAuthException) {
+          switch (e.code) {
+            case 'weak-password':
+              errorMessage = 'The password provided is too weak.';
+              break;
+            case 'email-already-in-use':
+              errorMessage = 'An account already exists for that email.';
+              break;
+            case 'invalid-email':
+              errorMessage = 'The email address is invalid.';
+              break;
+            default:
+              errorMessage = 'Error creating account: ${e.message}';
+          }
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      return false;
+    }
   }
 
   @override
@@ -557,16 +684,45 @@ class _ArtistSignInScreenState extends State<ArtistSignInScreen> {
                     width: double.infinity,
                     height: 56,
                     child: ElevatedButton(
-                      onPressed: () {
+                      onPressed: _isUploading ? null : () async {
                         if (_formKey.currentState!.validate()) {
-                          // Navigate to bottom navbar screen
-                          Navigator.pushAndRemoveUntil(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const BottomNavbarScreen(),
-                            ),
-                            (route) => false, // Remove all previous routes
-                          );
+                          setState(() {
+                            _isUploading = true;
+                          });
+
+                          String? imageUrl;
+
+                          // Upload profile picture if one is selected
+                          if (_profilePicture != null) {
+                            imageUrl = await _uploadProfilePicture();
+                            if (imageUrl == null) {
+                              // Upload failed, don't proceed
+                              setState(() {
+                                _isUploading = false;
+                              });
+                              return;
+                            }
+                          }
+
+                          // Save artist profile to Firestore
+                          final success = await _saveArtistProfile(imageUrl);
+                          
+                          setState(() {
+                            _isUploading = false;
+                          });
+
+                          if (success) {
+                            // Navigate to bottom navbar screen
+                            if (mounted) {
+                              Navigator.pushAndRemoveUntil(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const BottomNavbarScreen(),
+                                ),
+                                (route) => false, // Remove all previous routes
+                              );
+                            }
+                          }
                         }
                       },
                       style: ElevatedButton.styleFrom(
@@ -576,17 +732,59 @@ class _ArtistSignInScreenState extends State<ArtistSignInScreen> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                         elevation: 0,
+                        disabledBackgroundColor: Colors.grey[700],
                       ),
-                      child: const Text(
-                        'Complete Profile',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                      child: _isUploading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : const Text(
+                              'Complete Profile',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                     ),
                   ),
                   const SizedBox(height: 16),
+                  // Already have an account link
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Already have an account? ',
+                        style: TextStyle(
+                          color: Colors.grey[400],
+                          fontSize: 14,
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const ArtistLoginScreen(),
+                            ),
+                          );
+                        },
+                        child: const Text(
+                          'Sign In',
+                          style: TextStyle(
+                            color: Color(0xFF00B4FF),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
                   // Skip for Now link
                   Center(
                     child: GestureDetector(

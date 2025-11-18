@@ -1,38 +1,103 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'firebase_options.dart';
 import 'welcome_screen.dart';
+import 'bottom_navbar_screen.dart';
+import 'user_navbar_screen.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Flutter Demo',
+      title: 'HypeLink',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
       ),
-      home: const WelcomeScreen(),
+      home: const AuthWrapper(),
+    );
+  }
+}
+
+// Auth Wrapper to check if user is logged in
+class AuthWrapper extends StatelessWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        // Show loading while checking auth state
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            backgroundColor: Color(0xFF0A0E27),
+            body: Center(
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00B4FF)),
+              ),
+            ),
+          );
+        }
+
+        // If user is logged in, check if they're an artist or regular user
+        if (snapshot.hasData && snapshot.data != null) {
+          final userId = snapshot.data!.uid;
+          
+          // Check both artist and user collections
+          return FutureBuilder<List<DocumentSnapshot>>(
+            future: Future.wait([
+              FirebaseFirestore.instance.collection('artist').doc(userId).get(),
+              FirebaseFirestore.instance.collection('users').doc(userId).get(),
+            ]),
+            builder: (context, combinedSnapshot) {
+              if (combinedSnapshot.connectionState == ConnectionState.waiting) {
+                return const Scaffold(
+                  backgroundColor: Color(0xFF0A0E27),
+                  body: Center(
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00B4FF)),
+                    ),
+                  ),
+                );
+              }
+
+              if (combinedSnapshot.hasData) {
+                final artistDoc = combinedSnapshot.data![0];
+                final userDoc = combinedSnapshot.data![1];
+
+                // If artist document exists, navigate to BottomNavbarScreen
+                if (artistDoc.exists) {
+                  return const BottomNavbarScreen();
+                }
+
+                // If user document exists, navigate to UserNavbarScreen
+                if (userDoc.exists) {
+                  return const UserNavbarScreen();
+                }
+              }
+
+              // If neither artist nor user, show welcome screen
+              return const WelcomeScreen();
+            },
+          );
+        }
+
+        // If no user is logged in, show welcome screen
+        return const WelcomeScreen();
+      },
     );
   }
 }
