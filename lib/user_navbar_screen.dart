@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'all_artist_post.dart';
 import 'user_edit_profile_screen.dart';
 import 'choose_screen.dart';
+import 'market_place.dart';
 
 class UserNavbarScreen extends StatefulWidget {
   const UserNavbarScreen({super.key});
@@ -930,6 +931,57 @@ class UserWalletScreen extends StatelessWidget {
                       color: Colors.grey[400],
                     ),
                   ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              // Market Place button
+              InkWell(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const MarketPlaceScreen(),
+                    ),
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[900],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 50,
+                        height: 50,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF00B4FF),
+                          borderRadius: BorderRadius.circular(25),
+                        ),
+                        child: const Icon(
+                          Icons.store,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      const Expanded(
+                        child: Text(
+                          'Market Place',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      Icon(
+                        Icons.chevron_right,
+                        color: Colors.grey[400],
+                      ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 32),

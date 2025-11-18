@@ -962,6 +962,16 @@ class _AIScreenState extends State<AIScreen> {
       return;
     }
 
+    if (_recordingUrl == null || !File(_recordingUrl!).existsSync()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please record your vocals first'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     setState(() {
       _isUploading = true;
     });
@@ -1002,40 +1012,41 @@ class _AIScreenState extends State<AIScreen> {
       final artistName = artistData['artistName'] ?? 'Unknown Artist';
       final profileImageUrl = artistData['profileImageUrl'] as String?;
 
-      // Upload beat and recording to Firebase Storage
+      // Upload recording file to Firebase Storage in 'videos' folder (same as videos)
       final storageRef = FirebaseStorage.instance.ref();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final recordingFile = File(_recordingUrl!);
+      final extension = _recordingUrl!.split('.').last;
       
-      String? beatDownloadUrl;
-      String? recordingDownloadUrl;
+      // Upload to 'videos' folder (same structure as video uploads)
+      final videoRef = storageRef.child('videos/ai_creation_$timestamp.$extension');
+      await videoRef.putFile(recordingFile);
+      final videoDownloadUrl = await videoRef.getDownloadURL();
 
-      // Upload beat file
-      if (_generatedBeatUrl != null && File(_generatedBeatUrl!).existsSync()) {
-        final beatFile = File(_generatedBeatUrl!);
-        final beatRef = storageRef.child('ai_beats/beat_$timestamp.mp3');
-        await beatRef.putFile(beatFile);
-        beatDownloadUrl = await beatRef.getDownloadURL();
+      // Save to Firestore in videos collection structure (same as videos)
+      // Get or create the main video document for this artist
+      final videoDocRef = FirebaseFirestore.instance
+          .collection('videos')
+          .doc(user.uid);
+
+      // Check if document exists, if not create it
+      final videoDoc = await videoDocRef.get();
+      if (!videoDoc.exists) {
+        await videoDocRef.set({
+          'artistId': user.uid,
+          'artistName': artistName,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
       }
 
-      // Upload recording file
-      if (_recordingUrl != null && File(_recordingUrl!).existsSync()) {
-        final recordingFile = File(_recordingUrl!);
-        // Get file extension from path
-        final extension = _recordingUrl!.split('.').last;
-        final recordingRef = storageRef.child('ai_recordings/recording_$timestamp.$extension');
-        await recordingRef.putFile(recordingFile);
-        recordingDownloadUrl = await recordingRef.getDownloadURL();
-      }
-
-      // Create post document in Firestore
-      final postData = {
+      // Add video to 'vids' subcollection (same structure as video uploads)
+      final vidData = {
+        'videoUrl': videoDownloadUrl,
+        'title': _titleController.text.trim(),
         'artistId': user.uid,
         'artistName': artistName,
         'profileImageUrl': profileImageUrl,
-        'title': _titleController.text.trim(),
         'type': 'ai_creation',
-        'beatUrl': beatDownloadUrl,
-        'recordingUrl': recordingDownloadUrl,
         'genre': _selectedGenre ?? 'Unknown',
         'tempo': _tempo.toInt(),
         'beatDescription': _beatDescription,
@@ -1046,7 +1057,7 @@ class _AIScreenState extends State<AIScreen> {
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
-      await FirebaseFirestore.instance.collection('posts').add(postData);
+      await videoDocRef.collection('vids').add(vidData);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

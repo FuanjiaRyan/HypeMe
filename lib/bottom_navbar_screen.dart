@@ -22,13 +22,7 @@ class _BottomNavbarScreenState extends State<BottomNavbarScreen> {
   int _currentIndex = 0;
 
   List<Widget> get _screens => [
-    HomeScreen(
-      onUploadTap: () {
-        setState(() {
-          _currentIndex = 1; // Navigate to Upload tab
-        });
-      },
-    ),
+    const AllArtistPostScreen(showBackButton: false),
     const UploadScreen(),
     const AnalyticsScreen(),
     const WalletScreen(),
@@ -498,6 +492,127 @@ class UploadScreen extends StatefulWidget {
 
 class _UploadScreenState extends State<UploadScreen> {
   bool _isUploading = false;
+  List<Map<String, dynamic>> _recentPosts = [];
+  bool _isLoadingPosts = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRecentPosts();
+  }
+
+  Future<void> _loadRecentPosts() async {
+    final User? user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      if (mounted) {
+        setState(() {
+          _isLoadingPosts = false;
+        });
+      }
+      return;
+    }
+
+    try {
+      List<Map<String, dynamic>> allPosts = [];
+
+      // Fetch videos from 'videos/{artistId}/vids' subcollection
+      final videosDoc =
+          await FirebaseFirestore.instance
+              .collection('videos')
+              .doc(user.uid)
+              .get();
+
+      if (videosDoc.exists) {
+        final vidsSnapshot = await videosDoc.reference.collection('vids').get();
+
+        for (var vidDoc in vidsSnapshot.docs) {
+          final data = vidDoc.data();
+          allPosts.add({
+            'id': vidDoc.id,
+            'type': 'video',
+            'videoUrl': data['videoUrl'] ?? data['url'] ?? '',
+            'title': data['title'] ?? 'Untitled',
+            'createdAt': data['createdAt'],
+            'likes': data['likes'] ?? 0,
+            'views': data['views'] ?? 0,
+            'comments': data['comments'] ?? 0,
+          });
+        }
+      }
+
+      // Fetch posts from 'posts' collection
+      final postsSnapshot =
+          await FirebaseFirestore.instance
+              .collection('posts')
+              .where('artistId', isEqualTo: user.uid)
+              .get();
+
+      for (var postDoc in postsSnapshot.docs) {
+        final data = postDoc.data();
+        allPosts.add({
+          'id': postDoc.id,
+          'type': data['type'] ?? 'post',
+          'videoUrl': data['url'] ?? data['videoUrl'] ?? '',
+          'title': data['title'] ?? 'Untitled',
+          'createdAt': data['createdAt'],
+          'likes': data['likes'] ?? 0,
+          'views': data['views'] ?? 0,
+          'comments': data['comments'] ?? 0,
+        });
+      }
+
+      // Sort by createdAt timestamp (most recent first)
+      allPosts.sort((a, b) {
+        final aTime = a['createdAt'] as Timestamp?;
+        final bTime = b['createdAt'] as Timestamp?;
+        if (aTime == null && bTime == null) return 0;
+        if (aTime == null) return 1;
+        if (bTime == null) return -1;
+        return bTime.compareTo(aTime); // Descending order (newest first)
+      });
+
+      if (mounted) {
+        setState(() {
+          _recentPosts = allPosts;
+          _isLoadingPosts = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading recent posts: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingPosts = false;
+        });
+      }
+    }
+  }
+
+  String _getTimeAgo(Timestamp? timestamp) {
+    if (timestamp == null) return 'Unknown time';
+
+    final now = DateTime.now();
+    final time = timestamp.toDate();
+    final difference = now.difference(time);
+
+    if (difference.inDays > 0) {
+      return '${difference.inDays} ${difference.inDays == 1 ? 'day' : 'days'} ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours} ${difference.inHours == 1 ? 'hour' : 'hours'} ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes} ${difference.inMinutes == 1 ? 'minute' : 'minutes'} ago';
+    } else {
+      return 'Just now';
+    }
+  }
+
+  String _formatCount(int count) {
+    if (count >= 1000000) {
+      return '${(count / 1000000).toStringAsFixed(1)}M';
+    } else if (count >= 1000) {
+      return '${(count / 1000).toStringAsFixed(1)}k';
+    }
+    return count.toString();
+  }
 
   Future<void> _uploadVideo() async {
     try {
@@ -653,7 +768,8 @@ class _UploadScreenState extends State<UploadScreen> {
           ),
         );
 
-        // Navigate to all artist posts screen
+        // Reload recent posts and navigate to all artist posts screen
+        _loadRecentPosts();
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -730,63 +846,143 @@ class _UploadScreenState extends State<UploadScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: 5,
-                itemBuilder: (context, index) {
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[900],
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 60,
-                          height: 60,
-                          decoration: BoxDecoration(
-                            color: Colors.grey[800],
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Icon(
-                            Icons.play_circle_outline,
-                            color: Colors.white,
-                            size: 30,
-                          ),
+              _isLoadingPosts
+                  ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(24.0),
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Color(0xFF00B4FF),
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Content ${index + 1}',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Uploaded 2 days ago',
-                                style: TextStyle(
-                                  color: Colors.grey[400],
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Icon(Icons.more_vert, color: Colors.grey[400]),
-                      ],
+                      ),
                     ),
-                  );
-                },
-              ),
+                  )
+                  : _recentPosts.isEmpty
+                  ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Text(
+                        'No uploads yet',
+                        style: TextStyle(color: Colors.grey[400], fontSize: 16),
+                      ),
+                    ),
+                  )
+                  : ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount:
+                        _recentPosts.length > 10 ? 10 : _recentPosts.length,
+                    itemBuilder: (context, index) {
+                      final post = _recentPosts[index];
+                      final title = post['title'] as String? ?? 'Untitled';
+                      final createdAt = post['createdAt'] as Timestamp?;
+                      final videoUrl = post['videoUrl'] as String? ?? '';
+                      final type = post['type'] as String? ?? 'post';
+                      final views = post['views'] as int? ?? 0;
+                      final likes = post['likes'] as int? ?? 0;
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[900],
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            // Thumbnail
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                width: 60,
+                                height: 60,
+                                color: Colors.grey[800],
+                                child:
+                                    videoUrl.isNotEmpty
+                                        ? _VideoThumbnailWidget(
+                                          videoUrl: videoUrl,
+                                        )
+                                        : Icon(
+                                          type == 'video'
+                                              ? Icons.play_circle_outline
+                                              : Icons.music_note,
+                                          color: Colors.white,
+                                          size: 30,
+                                        ),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    title,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      Text(
+                                        _getTimeAgo(createdAt),
+                                        style: TextStyle(
+                                          color: Colors.grey[400],
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        '•',
+                                        style: TextStyle(
+                                          color: Colors.grey[600],
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Icon(
+                                        Icons.visibility,
+                                        size: 12,
+                                        color: Colors.grey[400],
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        _formatCount(views),
+                                        style: TextStyle(
+                                          color: Colors.grey[400],
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Icon(
+                                        Icons.favorite,
+                                        size: 12,
+                                        color: Colors.red[300],
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        _formatCount(likes),
+                                        style: TextStyle(
+                                          color: Colors.grey[400],
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(Icons.more_vert, color: Colors.grey[400]),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
             ],
           ),
         ),
@@ -862,11 +1058,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   int _followers = 0;
   int _following = 0;
   bool _isLoading = true;
+  List<Map<String, dynamic>> _topVideos = [];
+  bool _isLoadingVideos = true;
 
   @override
   void initState() {
     super.initState();
     _loadAnalytics();
+    _loadTopVideos();
   }
 
   Future<void> _loadAnalytics() async {
@@ -933,6 +1132,93 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       if (mounted) {
         setState(() {
           _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadTopVideos() async {
+    try {
+      List<Map<String, dynamic>> allVideos = [];
+
+      // Get all videos from all artists in 'videos' collection
+      final videosSnapshot =
+          await FirebaseFirestore.instance.collection('videos').get();
+
+      // Iterate through each artist's video document
+      for (var videoDoc in videosSnapshot.docs) {
+        // Get all videos from this artist's 'vids' subcollection
+        final vidsSnapshot = await videoDoc.reference.collection('vids').get();
+
+        for (var vidDoc in vidsSnapshot.docs) {
+          final data = vidDoc.data();
+          final likes = (data['likes'] as int?) ?? 0;
+          final comments = (data['comments'] as int?) ?? 0;
+          final views = (data['views'] as int?) ?? 0;
+
+          // Calculate interactivity score (likes + comments + views)
+          final interactivityScore = likes + comments + views;
+
+          allVideos.add({
+            'id': vidDoc.id,
+            'videoUrl': data['videoUrl'] ?? data['url'] ?? '',
+            'title': data['title'] ?? 'Untitled',
+            'artistName': data['artistName'] ?? 'Unknown Artist',
+            'artistId': videoDoc.id,
+            'likes': likes,
+            'views': views,
+            'comments': comments,
+            'interactivityScore': interactivityScore,
+            'createdAt': data['createdAt'],
+          });
+        }
+      }
+
+      // Get all posts from 'posts' collection (all artists)
+      final postsSnapshot =
+          await FirebaseFirestore.instance.collection('posts').get();
+
+      for (var postDoc in postsSnapshot.docs) {
+        final data = postDoc.data();
+        final likes = (data['likes'] as int?) ?? 0;
+        final comments = (data['comments'] as int?) ?? 0;
+        final views = (data['views'] as int?) ?? 0;
+
+        // Calculate interactivity score
+        final interactivityScore = likes + comments + views;
+
+        allVideos.add({
+          'id': postDoc.id,
+          'videoUrl': data['url'] ?? data['videoUrl'] ?? '',
+          'title': data['title'] ?? 'Untitled',
+          'artistName': data['artistName'] ?? 'Unknown Artist',
+          'artistId': data['artistId'] ?? '',
+          'likes': likes,
+          'views': views,
+          'comments': comments,
+          'interactivityScore': interactivityScore,
+          'createdAt': data['createdAt'],
+        });
+      }
+
+      // Sort by interactivity score (descending - most interactive first)
+      allVideos.sort((a, b) {
+        final scoreA = a['interactivityScore'] as int;
+        final scoreB = b['interactivityScore'] as int;
+        return scoreB.compareTo(scoreA);
+      });
+
+      if (mounted) {
+        setState(() {
+          _topVideos = allVideos;
+          _isLoadingVideos = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading top videos: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingVideos = false;
         });
       }
     }
@@ -1016,82 +1302,170 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: 5,
-                itemBuilder: (context, index) {
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[900],
-                      borderRadius: BorderRadius.circular(12),
+              _isLoadingVideos
+                  ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(24.0),
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Color(0xFF00B4FF),
+                        ),
+                      ),
                     ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 60,
-                          height: 60,
-                          decoration: BoxDecoration(
-                            color: Colors.grey[800],
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Icon(
-                            Icons.play_circle_outline,
-                            color: Colors.white,
-                            size: 30,
-                          ),
+                  )
+                  : _topVideos.isEmpty
+                  ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Text(
+                        'No content yet',
+                        style: TextStyle(color: Colors.grey[400], fontSize: 16),
+                      ),
+                    ),
+                  )
+                  : ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: _topVideos.length,
+                    itemBuilder: (context, index) {
+                      final video = _topVideos[index];
+                      final videoUrl = video['videoUrl'] as String? ?? '';
+                      final title = video['title'] as String? ?? 'Untitled';
+                      final artistName =
+                          video['artistName'] as String? ?? 'Unknown Artist';
+                      final views = video['views'] as int? ?? 0;
+                      final likes = video['likes'] as int? ?? 0;
+                      final comments = video['comments'] as int? ?? 0;
+                      final interactivityScore =
+                          video['interactivityScore'] as int? ?? 0;
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[900],
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Content ${index + 1}',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '${(index + 1) * 250} views',
-                                style: TextStyle(
-                                  color: Colors.grey[400],
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
+                        child: Row(
                           children: [
-                            Text(
-                              '${(index + 1) * 50}',
-                              style: const TextStyle(
-                                color: Color(0xFF00B4FF),
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
+                            // Video Thumbnail
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                width: 60,
+                                height: 60,
+                                color: Colors.grey[800],
+                                child:
+                                    videoUrl.isNotEmpty
+                                        ? _VideoThumbnailWidget(
+                                          videoUrl: videoUrl,
+                                        )
+                                        : const Icon(
+                                          Icons.play_circle_outline,
+                                          color: Colors.white,
+                                          size: 30,
+                                        ),
                               ),
                             ),
-                            Text(
-                              'likes',
-                              style: TextStyle(
-                                color: Colors.grey[400],
-                                fontSize: 12,
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    title,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'by $artistName',
+                                    style: TextStyle(
+                                      color: Colors.grey[500],
+                                      fontSize: 12,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.visibility,
+                                        size: 14,
+                                        color: Colors.grey[400],
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '${_formatCount(views)} views',
+                                        style: TextStyle(
+                                          color: Colors.grey[400],
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Icon(
+                                        Icons.favorite,
+                                        size: 14,
+                                        color: Colors.red[300],
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '${_formatCount(likes)}',
+                                        style: TextStyle(
+                                          color: Colors.grey[400],
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Icon(
+                                        Icons.comment,
+                                        size: 14,
+                                        color: Colors.grey[400],
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '${_formatCount(comments)}',
+                                        style: TextStyle(
+                                          color: Colors.grey[400],
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
                               ),
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  _formatCount(interactivityScore),
+                                  style: const TextStyle(
+                                    color: Color(0xFF00B4FF),
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                Text(
+                                  'score',
+                                  style: TextStyle(
+                                    color: Colors.grey[400],
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
-                      ],
-                    ),
-                  );
-                },
-              ),
+                      );
+                    },
+                  ),
             ],
           ),
         ),
@@ -1942,7 +2316,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 final video = _artistVideos[index];
                                 final videoUrl =
                                     video['videoUrl'] as String? ?? '';
-                                final views = video['views'] as int? ?? 0;
+                                final likes = video['likes'] as int? ?? 0;
 
                                 return GestureDetector(
                                   onTap: () {
@@ -1988,7 +2362,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                               size: 40,
                                             ),
                                           ),
-                                          // Overlay with views info
+                                          // Overlay with likes info
                                           Positioned(
                                             bottom: 4,
                                             left: 4,
@@ -2010,13 +2384,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
                                                   const Icon(
-                                                    Icons.play_arrow,
-                                                    color: Colors.white,
+                                                    Icons.favorite,
+                                                    color: Colors.red,
                                                     size: 12,
                                                   ),
                                                   const SizedBox(width: 4),
                                                   Text(
-                                                    _formatCount(views),
+                                                    _formatCount(likes),
                                                     style: const TextStyle(
                                                       color: Colors.white,
                                                       fontSize: 10,
