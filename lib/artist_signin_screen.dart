@@ -57,7 +57,7 @@ class _ArtistSignInScreenState extends State<ArtistSignInScreen> {
     
     // Profile picture (optional but counts if added)
     if (_profilePicture != null) completedFields++;
-    
+
     // Artist name
     if (_artistNameController.text.trim().isNotEmpty) completedFields++;
     

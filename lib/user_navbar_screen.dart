@@ -306,8 +306,134 @@ class UserHomeScreen extends StatelessWidget {
 }
 
 // Explore Screen
-class ExploreScreen extends StatelessWidget {
+class ExploreScreen extends StatefulWidget {
   const ExploreScreen({super.key});
+
+  @override
+  State<ExploreScreen> createState() => _ExploreScreenState();
+}
+
+class _ExploreScreenState extends State<ExploreScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  List<Map<String, dynamic>> _allVideos = [];
+  List<Map<String, dynamic>> _filteredVideos = [];
+  List<Map<String, dynamic>> _allArtists = [];
+  bool _isLoading = true;
+  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadVideos();
+    _loadArtists();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged() {
+    setState(() {
+      _searchQuery = _searchController.text.toLowerCase().trim();
+      _filterVideos();
+    });
+  }
+
+  void _filterVideos() {
+    if (_searchQuery.isEmpty) {
+      _filteredVideos = List.from(_allVideos);
+    } else {
+      _filteredVideos = _allVideos.where((video) {
+        final artistName = (video['artistName'] as String? ?? '').toLowerCase();
+        final title = (video['title'] as String? ?? '').toLowerCase();
+        return artistName.contains(_searchQuery) || title.contains(_searchQuery);
+      }).toList();
+    }
+  }
+
+  Future<void> _loadArtists() async {
+    try {
+      final artistsSnapshot = await FirebaseFirestore.instance
+          .collection('artist')
+          .get();
+
+      _allArtists = artistsSnapshot.docs.map((doc) {
+        final data = doc.data();
+        return {
+          'id': doc.id,
+          'artistName': data['artistName'] ?? 'Unknown Artist',
+          'profileImageUrl': data['profileImageUrl'],
+          'email': data['email'],
+        };
+      }).toList();
+    } catch (e) {
+      print('Error loading artists: $e');
+    }
+  }
+
+  Future<void> _loadVideos() async {
+    try {
+      // Fetch all documents from 'videos' collection
+      final videosSnapshot =
+          await FirebaseFirestore.instance.collection('videos').get();
+
+      List<Map<String, dynamic>> allVideos = [];
+
+      // For each document in 'videos', get all documents from 'vids' subcollection
+      for (var videoDoc in videosSnapshot.docs) {
+        final vidsSnapshot = await videoDoc.reference
+            .collection('vids')
+            .orderBy('createdAt', descending: true)
+            .get();
+
+        for (var vidDoc in vidsSnapshot.docs) {
+          final data = vidDoc.data();
+          final videoId = vidDoc.id;
+          final artistId = data['artistId'] ?? videoDoc.id;
+
+          allVideos.add({
+            'id': videoId,
+            'videoUrl': data['videoUrl'] ?? data['url'] ?? '',
+            'title': data['title'] ?? 'Untitled',
+            'artistName': data['artistName'] ?? 'Unknown Artist',
+            'artistId': artistId,
+            'profileImageUrl': data['profileImageUrl'],
+            'likes': data['likes'] ?? 0,
+            'views': data['views'] ?? 0,
+            'comments': data['comments'] ?? 0,
+            'createdAt': data['createdAt'],
+          });
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _allVideos = allVideos;
+          _filteredVideos = List.from(allVideos);
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading videos: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  String _formatCount(int count) {
+    if (count >= 1000000) {
+      return '${(count / 1000000).toStringAsFixed(1)}M';
+    } else if (count >= 1000) {
+      return '${(count / 1000).toStringAsFixed(1)}k';
+    }
+    return count.toString();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -318,9 +444,11 @@ class ExploreScreen extends StatelessWidget {
       child: SafeArea(
         child: Column(
           children: [
+            // Search Bar
             Padding(
               padding: const EdgeInsets.all(16.0),
               child: TextField(
+                controller: _searchController,
                 decoration: InputDecoration(
                   hintText: 'Search artists, songs, videos...',
                   hintStyle: TextStyle(color: Colors.grey[400]),
@@ -339,45 +467,170 @@ class ExploreScreen extends StatelessWidget {
                 style: const TextStyle(color: Colors.white),
               ),
             ),
+            // Videos Grid
             Expanded(
-              child: GridView.builder(
+              child: _isLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00B4FF)),
+                      ),
+                    )
+                  : _filteredVideos.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.search_off,
+                                color: Colors.grey[600],
+                                size: 64,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                _searchQuery.isNotEmpty
+                                    ? 'No videos found'
+                                    : 'No videos available',
+                                style: TextStyle(
+                                  color: Colors.grey[400],
+                                  fontSize: 18,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : GridView.builder(
                 padding: const EdgeInsets.all(16.0),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
                   crossAxisSpacing: 12,
                   mainAxisSpacing: 12,
-                  childAspectRatio: 1.2,
+                            childAspectRatio: 0.75,
                 ),
-                itemCount: 20,
+                          itemCount: _filteredVideos.length,
                 itemBuilder: (context, index) {
+                            final video = _filteredVideos[index];
+                            final videoUrl = video['videoUrl'] as String? ?? '';
+                            final artistName =
+                                video['artistName'] as String? ?? 'Unknown Artist';
+                            final likes = video['likes'] as int? ?? 0;
+                            final profileImageUrl =
+                                video['profileImageUrl'] as String?;
+                            final videoId = video['id'] as String;
+
                   return GestureDetector(
                     onTap: () {
+                                // Navigate to video player
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => const AllArtistPostScreen(showBackButton: true),
+                                    builder: (context) =>
+                                        const AllArtistPostScreen(showBackButton: true),
                         ),
                       );
                     },
                     child: Container(
                       decoration: BoxDecoration(
-                        color: Colors.grey[900],
                         borderRadius: BorderRadius.circular(12),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.3),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 4),
                       ),
+                                  ],
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
+                                      // Background: Artist Profile Picture
+                                      if (profileImageUrl != null &&
+                                          profileImageUrl.isNotEmpty)
+                                        CachedNetworkImage(
+                                          imageUrl: profileImageUrl,
+                                          fit: BoxFit.cover,
+                                          placeholder: (context, url) => Container(
+                                            color: Colors.grey[900],
+                                            child: const Center(
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                valueColor:
+                                                    AlwaysStoppedAnimation<Color>(
+                                                  Color(0xFF00B4FF),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          errorWidget: (context, url, error) =>
+                                              Container(
+                                            decoration: BoxDecoration(
+                                              gradient: LinearGradient(
+                                                begin: Alignment.topLeft,
+                                                end: Alignment.bottomRight,
+                                                colors: [
+                                                  Colors.orange[300]!,
+                                                  Colors.green[300]!,
+                                                ],
+                                              ),
+                                            ),
+                                            child: const Icon(
+                                              Icons.person,
+                                              color: Colors.white,
+                                              size: 40,
+                                            ),
+                                          ),
+                                        )
+                                      else
+                                        Container(
+                                          decoration: BoxDecoration(
+                                            gradient: LinearGradient(
+                                              begin: Alignment.topLeft,
+                                              end: Alignment.bottomRight,
+                                              colors: [
+                                                Colors.orange[300]!,
+                                                Colors.green[300]!,
+                                              ],
+                                            ),
+                                          ),
+                                          child: const Icon(
+                                            Icons.person,
+                                            color: Colors.white,
+                                            size: 40,
+                                          ),
+                                        ),
+                                      // Overlay: Video Thumbnail/Preview
+                                      if (videoUrl.isNotEmpty)
+                                        Positioned.fill(
                             child: Container(
-                              color: Colors.grey[800],
+                                            decoration: BoxDecoration(
+                                              gradient: LinearGradient(
+                                                begin: Alignment.topCenter,
+                                                end: Alignment.bottomCenter,
+                                                colors: [
+                                                  Colors.transparent,
+                                                  Colors.black.withOpacity(0.7),
+                                                ],
+                                              ),
+                                            ),
+                                            child: Center(
+                                              child: Container(
+                                                padding: const EdgeInsets.all(8),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.black.withOpacity(0.5),
+                                                  shape: BoxShape.circle,
+                                                ),
                               child: const Icon(
-                                Icons.music_note,
+                                                  Icons.play_circle_filled,
                                 color: Colors.white,
                                 size: 40,
                               ),
                             ),
                           ),
+                                          ),
+                                        ),
+                                      // Bottom Overlay: Video Info
                           Positioned(
                             bottom: 0,
                             left: 0,
@@ -390,39 +643,49 @@ class ExploreScreen extends StatelessWidget {
                                   end: Alignment.bottomCenter,
                                   colors: [
                                     Colors.transparent,
-                                    Colors.black.withOpacity(0.8),
+                                                Colors.black.withOpacity(0.9),
                                   ],
-                                ),
-                                borderRadius: const BorderRadius.only(
-                                  bottomLeft: Radius.circular(12),
-                                  bottomRight: Radius.circular(12),
                                 ),
                               ),
                               child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(
-                                    'Track ${index + 1}',
+                                                artistName,
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 14,
                                       fontWeight: FontWeight.w600,
                                     ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
                                   ),
                                   const SizedBox(height: 4),
+                                              Row(
+                                                children: [
+                                                  const Icon(
+                                                    Icons.favorite,
+                                                    color: Colors.red,
+                                                    size: 14,
+                                                  ),
+                                                  const SizedBox(width: 4),
                                   Text(
-                                    'Artist Name',
+                                                    _formatCount(likes),
                                     style: TextStyle(
                                       color: Colors.grey[300],
                                       fontSize: 12,
                                     ),
+                                                  ),
+                                                ],
                                   ),
                                 ],
                               ),
                             ),
                           ),
                         ],
+                                  ),
                       ),
                     ),
                   );
@@ -830,7 +1093,6 @@ class UserProfileScreen extends StatefulWidget {
 }
 
 class _UserProfileScreenState extends State<UserProfileScreen> {
-  bool _contributeModeEnabled = false;
   bool _darkModeEnabled = true;
 
   @override
@@ -874,124 +1136,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   children: [
                     // User Profile Section
                     _buildUserProfileSection(),
-                    const SizedBox(height: 32),
-                    // Contribution Settings Section
-                    const Text(
-                      'Contribution Settings',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    // Contribute Mode
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[900],
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: Colors.grey[800],
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(
-                              Icons.memory,
-                              color: Colors.white,
-                              size: 20,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Contribute Mode',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Earn rewards by contributing your device\'s...',
-                                  style: TextStyle(
-                                    color: Colors.grey[400],
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Switch(
-                            value: _contributeModeEnabled,
-                            onChanged: (value) {
-                              setState(() {
-                                _contributeModeEnabled = value;
-                              });
-                            },
-                            activeColor: const Color(0xFF00B4FF),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    // Contribution Level
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[900],
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: Colors.grey[800],
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(
-                              Icons.trending_up,
-                              color: Colors.white,
-                              size: 20,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          const Expanded(
-                            child: Text(
-                              'Contribution Level',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          const Text(
-                            'Medium',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Icon(
-                            Icons.chevron_right,
-                            color: Colors.grey[400],
-                          ),
-                        ],
-                      ),
-                    ),
                     const SizedBox(height: 32),
                     // General Settings Section
                     const Text(
@@ -1114,21 +1258,15 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     ),
                     const SizedBox(height: 16),
                     _buildSettingsItem(
-                      icon: Icons.help_outline,
-                      title: 'Support & FAQ',
-                      onTap: () {},
-                    ),
-                    const SizedBox(height: 12),
-                    _buildSettingsItem(
                       icon: Icons.privacy_tip_outlined,
                       title: 'Privacy Policy',
-                      onTap: () {},
+                      onTap: () => _showPrivacyPolicyDialog(context),
                     ),
                     const SizedBox(height: 12),
                     _buildSettingsItem(
                       icon: Icons.gavel_outlined,
                       title: 'Terms of Service',
-                      onTap: () {},
+                      onTap: () => _showTermsOfServiceDialog(context),
                     ),
                     const SizedBox(height: 32),
                     // Log Out button
@@ -1547,6 +1685,369 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         builder: (context) => _FullScreenImagePage(imageUrl: imageUrl),
         fullscreenDialog: true,
       ),
+    );
+  }
+
+  void _showPrivacyPolicyDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.grey[900],
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Container(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.8,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[800],
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(16),
+                      topRight: Radius.circular(16),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.privacy_tip_outlined,
+                        color: Color(0xFF00B4FF),
+                        size: 28,
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Privacy Policy',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
+                  ),
+                ),
+                // Content
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Last Updated: January 2024',
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontSize: 12,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        _buildPolicySection(
+                          '1. Information We Collect',
+                          'We collect information that you provide directly to us, including:\n\n'
+                          '• Account information (name, email, profile picture)\n'
+                          '• Content you create and share (videos, comments, likes)\n'
+                          '• Usage data and analytics\n'
+                          '• Device information and identifiers',
+                        ),
+                        const SizedBox(height: 20),
+                        _buildPolicySection(
+                          '2. How We Use Your Information',
+                          'We use the information we collect to:\n\n'
+                          '• Provide and improve our services\n'
+                          '• Personalize your experience\n'
+                          '• Communicate with you about our services\n'
+                          '• Ensure platform security and prevent fraud\n'
+                          '• Comply with legal obligations',
+                        ),
+                        const SizedBox(height: 20),
+                        _buildPolicySection(
+                          '3. Information Sharing',
+                          'We do not sell your personal information. We may share your information only:\n\n'
+                          '• With your consent\n'
+                          '• To comply with legal obligations\n'
+                          '• To protect our rights and safety\n'
+                          '• With service providers who assist us in operating our platform',
+                        ),
+                        const SizedBox(height: 20),
+                        _buildPolicySection(
+                          '4. Data Security',
+                          'We implement appropriate technical and organizational measures to protect your personal information. However, no method of transmission over the internet is 100% secure.',
+                        ),
+                        const SizedBox(height: 20),
+                        _buildPolicySection(
+                          '5. Your Rights',
+                          'You have the right to:\n\n'
+                          '• Access your personal data\n'
+                          '• Correct inaccurate data\n'
+                          '• Delete your account and data\n'
+                          '• Object to processing of your data\n'
+                          '• Data portability',
+                        ),
+                        const SizedBox(height: 20),
+                        _buildPolicySection(
+                          '6. Contact Us',
+                          'If you have questions about this Privacy Policy, please contact us at:\n\n'
+                          'Email: privacy@hypelink.com\n'
+                          'Address: [Your Company Address]',
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                // Footer
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[800],
+                    borderRadius: const BorderRadius.only(
+                      bottomLeft: Radius.circular(16),
+                      bottomRight: Radius.circular(16),
+                    ),
+                  ),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF00B4FF),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: const Text(
+                        'I Understand',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showTermsOfServiceDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.grey[900],
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Container(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.8,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[800],
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(16),
+                      topRight: Radius.circular(16),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.gavel_outlined,
+                        color: Color(0xFF00B4FF),
+                        size: 28,
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Terms of Service',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
+                  ),
+                ),
+                // Content
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Last Updated: January 2024',
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontSize: 12,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        _buildPolicySection(
+                          '1. Acceptance of Terms',
+                          'By accessing and using HypeLink, you accept and agree to be bound by these Terms of Service. If you do not agree, please do not use our service.',
+                        ),
+                        const SizedBox(height: 20),
+                        _buildPolicySection(
+                          '2. User Accounts',
+                          'You are responsible for:\n\n'
+                          '• Maintaining the confidentiality of your account\n'
+                          '• All activities that occur under your account\n'
+                          '• Providing accurate and complete information\n'
+                          '• Notifying us of any unauthorized use',
+                        ),
+                        const SizedBox(height: 20),
+                        _buildPolicySection(
+                          '3. User Content',
+                          'You retain ownership of content you post. By posting, you grant us:\n\n'
+                          '• A worldwide, non-exclusive license to use, display, and distribute your content\n'
+                          '• The right to remove content that violates these terms\n\n'
+                          'You agree not to post content that is:\n'
+                          '• Illegal, harmful, or offensive\n'
+                          '• Infringing on others\' rights\n'
+                          '• Spam or misleading',
+                        ),
+                        const SizedBox(height: 20),
+                        _buildPolicySection(
+                          '4. Prohibited Activities',
+                          'You agree not to:\n\n'
+                          '• Violate any laws or regulations\n'
+                          '• Infringe on intellectual property rights\n'
+                          '• Harass, abuse, or harm others\n'
+                          '• Interfere with the service\'s operation\n'
+                          '• Use automated systems to access the service\n'
+                          '• Attempt to gain unauthorized access',
+                        ),
+                        const SizedBox(height: 20),
+                        _buildPolicySection(
+                          '5. Intellectual Property',
+                          'The service and its original content, features, and functionality are owned by HypeLink and are protected by international copyright, trademark, and other intellectual property laws.',
+                        ),
+                        const SizedBox(height: 20),
+                        _buildPolicySection(
+                          '6. Termination',
+                          'We may terminate or suspend your account immediately, without prior notice, for conduct that we believe violates these Terms of Service or is harmful to other users, us, or third parties.',
+                        ),
+                        const SizedBox(height: 20),
+                        _buildPolicySection(
+                          '7. Disclaimer of Warranties',
+                          'The service is provided "as is" and "as available" without warranties of any kind, either express or implied, including but not limited to implied warranties of merchantability, fitness for a particular purpose, or non-infringement.',
+                        ),
+                        const SizedBox(height: 20),
+                        _buildPolicySection(
+                          '8. Limitation of Liability',
+                          'To the fullest extent permitted by law, HypeLink shall not be liable for any indirect, incidental, special, consequential, or punitive damages resulting from your use or inability to use the service.',
+                        ),
+                        const SizedBox(height: 20),
+                        _buildPolicySection(
+                          '9. Changes to Terms',
+                          'We reserve the right to modify these terms at any time. We will notify users of any material changes. Your continued use of the service constitutes acceptance of the modified terms.',
+                        ),
+                        const SizedBox(height: 20),
+                        _buildPolicySection(
+                          '10. Contact Information',
+                          'If you have questions about these Terms of Service, please contact us at:\n\n'
+                          'Email: legal@hypelink.com\n'
+                          'Address: [Your Company Address]',
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                // Footer
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[800],
+                    borderRadius: const BorderRadius.only(
+                      bottomLeft: Radius.circular(16),
+                      bottomRight: Radius.circular(16),
+                    ),
+                  ),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF00B4FF),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: const Text(
+                        'I Agree',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildPolicySection(String title, String content) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            color: Color(0xFF00B4FF),
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          content,
+          style: const TextStyle(
+            color: Colors.white70,
+            fontSize: 14,
+            height: 1.6,
+          ),
+        ),
+      ],
     );
   }
 }

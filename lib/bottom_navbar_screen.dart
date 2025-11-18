@@ -2,9 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:file_picker/file_picker.dart';
+import 'dart:io';
+import 'package:video_player/video_player.dart';
 import 'all_artist_post.dart';
 import 'choose_screen.dart';
 import 'artist_edit_profile_screen.dart';
+import 'ai_screen.dart';
 
 class BottomNavbarScreen extends StatefulWidget {
   const BottomNavbarScreen({super.key});
@@ -91,10 +96,95 @@ class _BottomNavbarScreenState extends State<BottomNavbarScreen> {
 }
 
 // Home Screen
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   final VoidCallback? onUploadTap;
 
   const HomeScreen({super.key, this.onUploadTap});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  int _totalLikes = 0;
+  int _totalComments = 0;
+  int _totalFollowers = 0;
+  int _totalViews = 0;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStatistics();
+  }
+
+  Future<void> _loadStatistics() async {
+    try {
+      int totalLikes = 0;
+      int totalComments = 0;
+      int totalViews = 0;
+      int totalFollowers = 0;
+
+      // Fetch all videos and sum up likes, comments, and views
+      final videosSnapshot =
+          await FirebaseFirestore.instance.collection('videos').get();
+
+      for (var videoDoc in videosSnapshot.docs) {
+        final vidsSnapshot = await videoDoc.reference.collection('vids').get();
+
+        for (var vidDoc in vidsSnapshot.docs) {
+          final data = vidDoc.data();
+          totalLikes += (data['likes'] as int?) ?? 0;
+          totalComments += (data['comments'] as int?) ?? 0;
+          totalViews += (data['views'] as int?) ?? 0;
+        }
+      }
+
+      // Fetch all artists and sum up followers
+      final artistsSnapshot =
+          await FirebaseFirestore.instance.collection('artist').get();
+
+      for (var artistDoc in artistsSnapshot.docs) {
+        final data = artistDoc.data();
+        totalFollowers += (data['followers'] as int?) ?? 0;
+      }
+
+      if (mounted) {
+        setState(() {
+          _totalLikes = totalLikes;
+          _totalComments = totalComments;
+          _totalViews = totalViews;
+          _totalFollowers = totalFollowers;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading statistics: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  String _formatCount(int count) {
+    if (count >= 1000000) {
+      return '${(count / 1000000).toStringAsFixed(1)}M';
+    } else if (count >= 1000) {
+      return '${(count / 1000).toStringAsFixed(1)}k';
+    }
+    return count.toString();
+  }
+
+  void _showAllArtistsPosts(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const AllArtistPostScreen(showBackButton: true),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -231,31 +321,13 @@ class HomeScreen extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        const Text(
-                          '12.5K',
-                          style: TextStyle(
+                        Text(
+                          _isLoading ? '...' : _formatCount(_totalViews),
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 28,
                             fontWeight: FontWeight.bold,
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.trending_up,
-                              color: Colors.green[400],
-                              size: 16,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              '+12% from last month',
-                              style: TextStyle(
-                                color: Colors.green[400],
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
                         ),
                       ],
                     ),
@@ -296,28 +368,21 @@ class HomeScreen extends StatelessWidget {
                   children: [
                     _buildPerformanceRow(
                       'Likes',
-                      '3.2K',
+                      _isLoading ? '...' : _formatCount(_totalLikes),
                       Icons.favorite,
                       Colors.red,
                     ),
                     const SizedBox(height: 16),
                     _buildPerformanceRow(
                       'Comments',
-                      '890',
+                      _isLoading ? '...' : _formatCount(_totalComments),
                       Icons.comment,
                       Colors.blue,
                     ),
                     const SizedBox(height: 16),
                     _buildPerformanceRow(
-                      'Shares',
-                      '450',
-                      Icons.share,
-                      Colors.green,
-                    ),
-                    const SizedBox(height: 16),
-                    _buildPerformanceRow(
                       'Followers',
-                      '1.8K',
+                      _isLoading ? '...' : _formatCount(_totalFollowers),
                       Icons.people,
                       Colors.purple,
                     ),
@@ -332,7 +397,7 @@ class HomeScreen extends StatelessWidget {
                     child: SizedBox(
                       height: 56,
                       child: ElevatedButton.icon(
-                        onPressed: onUploadTap,
+                        onPressed: widget.onUploadTap,
                         icon: const Icon(Icons.cloud_upload),
                         label: const Text(
                           'Upload New Content',
@@ -421,20 +486,200 @@ class HomeScreen extends StatelessWidget {
       ],
     );
   }
-
-  void _showAllArtistsPosts(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const AllArtistPostScreen(showBackButton: true),
-      ),
-    );
-  }
 }
 
 // Upload Screen
-class UploadScreen extends StatelessWidget {
+class UploadScreen extends StatefulWidget {
   const UploadScreen({super.key});
+
+  @override
+  State<UploadScreen> createState() => _UploadScreenState();
+}
+
+class _UploadScreenState extends State<UploadScreen> {
+  bool _isUploading = false;
+
+  Future<void> _uploadVideo() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.video,
+        allowMultiple: false,
+      );
+
+      if (result != null && result.files.single.path != null) {
+        final filePath = result.files.single.path!;
+        final file = File(filePath);
+
+        if (await file.exists()) {
+          await _uploadFileToFirebase(file, 'video', 'videos');
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('File not found. Please try again.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error selecting video: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _uploadFileToFirebase(
+    File file,
+    String type,
+    String folder,
+  ) async {
+    final User? user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('User not logged in'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    setState(() {
+      _isUploading = true;
+    });
+
+    try {
+      // Get artist data
+      final artistDoc =
+          await FirebaseFirestore.instance
+              .collection('artist')
+              .doc(user.uid)
+              .get();
+
+      if (!artistDoc.exists) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Artist profile not found'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      final artistData = artistDoc.data()!;
+      final artistName = artistData['artistName'] ?? 'Unknown Artist';
+      final profileImageUrl = artistData['profileImageUrl'] as String?;
+
+      // Upload file to Firebase Storage
+      // Videos are saved to 'videos' folder, audios to 'audios' folder
+      final storageRef = FirebaseStorage.instance.ref();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final extension = file.path.split('.').last;
+      final fileName = '${type}_$timestamp.$extension';
+      // Create reference in the specified folder (videos or audios)
+      final fileRef = storageRef.child('$folder/$fileName');
+
+      await fileRef.putFile(file);
+      final downloadUrl = await fileRef.getDownloadURL();
+
+      // For videos, save to 'videos' collection with 'vids' subcollection
+      if (type == 'video') {
+        // Get or create the main video document for this artist
+        final videoDocRef = FirebaseFirestore.instance
+            .collection('videos')
+            .doc(user.uid);
+
+        // Check if document exists, if not create it
+        final videoDoc = await videoDocRef.get();
+        if (!videoDoc.exists) {
+          await videoDocRef.set({
+            'artistId': user.uid,
+            'artistName': artistName,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+        }
+
+        // Add video to 'vids' subcollection
+        final vidData = {
+          'videoUrl': downloadUrl,
+          'title': 'My Video',
+          'artistId': user.uid,
+          'artistName': artistName,
+          'profileImageUrl': profileImageUrl,
+          'likes': 0,
+          'views': 0,
+          'comments': 0,
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        };
+
+        await videoDocRef.collection('vids').add(vidData);
+      } else {
+        // For other types, save to 'posts' collection
+        final postData = {
+          'artistId': user.uid,
+          'artistName': artistName,
+          'profileImageUrl': profileImageUrl,
+          'title': 'My $type',
+          'type': type,
+          'url': downloadUrl,
+          'likes': 0,
+          'views': 0,
+          'comments': 0,
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        };
+
+        await FirebaseFirestore.instance.collection('posts').add(postData);
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$type uploaded successfully!'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+
+        // Navigate to all artist posts screen
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder:
+                (context) => const AllArtistPostScreen(showBackButton: false),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error uploading $type: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -459,22 +704,21 @@ class UploadScreen extends StatelessWidget {
               _buildUploadOption(
                 icon: Icons.video_library_outlined,
                 title: 'Upload Video',
-                subtitle: 'Share your video content',
-                onTap: () {},
+                subtitle:
+                    _isUploading ? 'Uploading...' : 'Share your video content',
+                onTap: _isUploading ? null : () => _uploadVideo(),
               ),
               const SizedBox(height: 12),
               _buildUploadOption(
-                icon: Icons.music_note_outlined,
-                title: 'Upload Audio',
-                subtitle: 'Share your music or audio',
-                onTap: () {},
-              ),
-              const SizedBox(height: 12),
-              _buildUploadOption(
-                icon: Icons.image_outlined,
-                title: 'Upload Image',
-                subtitle: 'Share your photos or artwork',
-                onTap: () {},
+                icon: Icons.auto_awesome,
+                title: 'AI Beat Creator',
+                subtitle: 'Create beats with AI and sing along',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const AIScreen()),
+                  );
+                },
               ),
               const SizedBox(height: 32),
               const Text(
@@ -554,7 +798,7 @@ class UploadScreen extends StatelessWidget {
     required IconData icon,
     required String title,
     required String subtitle,
-    required VoidCallback onTap,
+    required VoidCallback? onTap,
   }) {
     return InkWell(
       onTap: onTap,
@@ -605,8 +849,103 @@ class UploadScreen extends StatelessWidget {
 }
 
 // Analytics Screen
-class AnalyticsScreen extends StatelessWidget {
+class AnalyticsScreen extends StatefulWidget {
   const AnalyticsScreen({super.key});
+
+  @override
+  State<AnalyticsScreen> createState() => _AnalyticsScreenState();
+}
+
+class _AnalyticsScreenState extends State<AnalyticsScreen> {
+  int _totalViews = 0;
+  int _totalLikes = 0;
+  int _followers = 0;
+  int _following = 0;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAnalytics();
+  }
+
+  Future<void> _loadAnalytics() async {
+    final User? user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    try {
+      // Get artist document for followers and following
+      final artistDoc =
+          await FirebaseFirestore.instance
+              .collection('artist')
+              .doc(user.uid)
+              .get();
+
+      if (artistDoc.exists) {
+        final data = artistDoc.data()!;
+        _followers = (data['followers'] as int?) ?? 0;
+        _following = (data['following'] as int?) ?? 0;
+      }
+
+      // Sum up views and likes from all videos
+      int totalViews = 0;
+      int totalLikes = 0;
+
+      // Get videos from 'videos/{artistId}/vids' subcollection
+      final videosDoc =
+          await FirebaseFirestore.instance
+              .collection('videos')
+              .doc(user.uid)
+              .get();
+
+      if (videosDoc.exists) {
+        final vidsSnapshot = await videosDoc.reference.collection('vids').get();
+
+        for (var vidDoc in vidsSnapshot.docs) {
+          final data = vidDoc.data();
+          totalViews += (data['views'] as int?) ?? 0;
+          totalLikes += (data['likes'] as int?) ?? 0;
+        }
+      }
+
+      // Get posts from 'posts' collection
+      final postsSnapshot =
+          await FirebaseFirestore.instance
+              .collection('posts')
+              .where('artistId', isEqualTo: user.uid)
+              .get();
+
+      for (var postDoc in postsSnapshot.docs) {
+        final data = postDoc.data();
+        totalViews += (data['views'] as int?) ?? 0;
+        totalLikes += (data['likes'] as int?) ?? 0;
+      }
+
+      if (mounted) {
+        setState(() {
+          _totalViews = totalViews;
+          _totalLikes = totalLikes;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading analytics: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  String _formatCount(int count) {
+    if (count >= 1000000) {
+      return '${(count / 1000000).toStringAsFixed(1)}M';
+    } else if (count >= 1000) {
+      return '${(count / 1000).toStringAsFixed(1)}k';
+    }
+    return count.toString();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -633,7 +972,7 @@ class AnalyticsScreen extends StatelessWidget {
                   Expanded(
                     child: _buildStatCard(
                       title: 'Total Views',
-                      value: '12.5K',
+                      value: _isLoading ? '...' : _formatCount(_totalViews),
                       icon: Icons.visibility_outlined,
                     ),
                   ),
@@ -641,7 +980,7 @@ class AnalyticsScreen extends StatelessWidget {
                   Expanded(
                     child: _buildStatCard(
                       title: 'Likes',
-                      value: '3.2K',
+                      value: _isLoading ? '...' : _formatCount(_totalLikes),
                       icon: Icons.favorite_outline,
                     ),
                   ),
@@ -653,16 +992,16 @@ class AnalyticsScreen extends StatelessWidget {
                   Expanded(
                     child: _buildStatCard(
                       title: 'Followers',
-                      value: '1.8K',
+                      value: _isLoading ? '...' : _formatCount(_followers),
                       icon: Icons.people_outline,
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: _buildStatCard(
-                      title: 'Earnings',
-                      value: '\$450',
-                      icon: Icons.attach_money,
+                      title: 'Following',
+                      value: _isLoading ? '...' : _formatCount(_following),
+                      icon: Icons.person_add_outlined,
                     ),
                   ),
                 ],
@@ -999,8 +1338,186 @@ class WalletScreen extends StatelessWidget {
 }
 
 // Profile Screen
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  int _followersCount = 0;
+  int _followingCount = 0;
+  int _postsCount = 0;
+  bool _isLoadingStats = true;
+  List<Map<String, dynamic>> _artistVideos = [];
+  bool _isLoadingVideos = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfileStats();
+    _loadArtistVideos();
+  }
+
+  Future<void> _loadProfileStats() async {
+    final User? user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    try {
+      // Get artist document
+      final artistDoc =
+          await FirebaseFirestore.instance
+              .collection('artist')
+              .doc(user.uid)
+              .get();
+
+      if (artistDoc.exists) {
+        final data = artistDoc.data()!;
+        _followersCount = (data['followers'] as int?) ?? 0;
+        _followingCount = (data['following'] as int?) ?? 0;
+      }
+
+      // Count posts from 'posts' collection
+      final postsSnapshot =
+          await FirebaseFirestore.instance
+              .collection('posts')
+              .where('artistId', isEqualTo: user.uid)
+              .get();
+
+      int postsCount = postsSnapshot.docs.length;
+
+      // Count videos from 'videos/{artistId}/vids' subcollection
+      final videosDoc =
+          await FirebaseFirestore.instance
+              .collection('videos')
+              .doc(user.uid)
+              .get();
+
+      if (videosDoc.exists) {
+        final vidsSnapshot = await videosDoc.reference.collection('vids').get();
+        postsCount += vidsSnapshot.docs.length;
+      }
+
+      if (mounted) {
+        setState(() {
+          _postsCount = postsCount;
+          _isLoadingStats = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading profile stats: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingStats = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadArtistVideos() async {
+    final User? user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    try {
+      // Fetch videos from 'videos/{artistId}/vids' subcollection
+      final videosDoc =
+          await FirebaseFirestore.instance
+              .collection('videos')
+              .doc(user.uid)
+              .get();
+
+      List<Map<String, dynamic>> videos = [];
+
+      if (videosDoc.exists) {
+        final vidsSnapshot =
+            await videosDoc.reference
+                .collection('vids')
+                .orderBy('createdAt', descending: true)
+                .get();
+
+        for (var vidDoc in vidsSnapshot.docs) {
+          final data = vidDoc.data();
+          videos.add({
+            'id': vidDoc.id,
+            'videoUrl': data['videoUrl'] ?? data['url'] ?? '',
+            'title': data['title'] ?? 'Untitled',
+            'likes': data['likes'] ?? 0,
+            'views': data['views'] ?? 0,
+            'comments': data['comments'] ?? 0,
+            'createdAt': data['createdAt'],
+          });
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _artistVideos = videos;
+          _isLoadingVideos = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading artist videos: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingVideos = false;
+        });
+      }
+    }
+  }
+
+  String _formatCount(int count) {
+    if (count >= 1000000) {
+      return '${(count / 1000000).toStringAsFixed(1)}M';
+    } else if (count >= 1000) {
+      return '${(count / 1000).toStringAsFixed(1)}k';
+    }
+    return count.toString();
+  }
+
+  Future<void> _handleLogout(BuildContext context) async {
+    // Show confirmation dialog
+    final shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: Colors.grey[900],
+          title: const Text('Logout', style: TextStyle(color: Colors.white)),
+          content: const Text(
+            'Are you sure you want to logout?',
+            style: TextStyle(color: Colors.white70),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text(
+                'Logout',
+                style: TextStyle(color: Color(0xFF00B4FF)),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldLogout == true) {
+      // Sign out from Firebase
+      await FirebaseAuth.instance.signOut();
+
+      // Navigate to ChooseScreen and remove all previous routes
+      if (context.mounted) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const ChooseScreen()),
+          (route) => false, // Remove all previous routes
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1049,6 +1566,21 @@ class ProfileScreen extends StatelessWidget {
             final email = artistData['email'] as String? ?? '';
             final bio = artistData['bio'] as String? ?? '';
 
+            // Update stats when artist data changes
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                final followers = (artistData['followers'] as int?) ?? 0;
+                final following = (artistData['following'] as int?) ?? 0;
+                if (_followersCount != followers ||
+                    _followingCount != following) {
+                  setState(() {
+                    _followersCount = followers;
+                    _followingCount = following;
+                  });
+                }
+              }
+            });
+
             return CustomScrollView(
               slivers: [
                 SliverAppBar(
@@ -1056,6 +1588,81 @@ class ProfileScreen extends StatelessWidget {
                   floating: false,
                   pinned: true,
                   backgroundColor: const Color(0xFF0A0E27),
+                  actions: [
+                    PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_vert, color: Colors.white),
+                      color: Colors.grey[900],
+                      onSelected: (value) {
+                        if (value == 'edit_profile') {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (context) => const ArtistEditProfileScreen(),
+                            ),
+                          );
+                        } else if (value == 'settings') {
+                          // Settings functionality (can be implemented later)
+                        } else if (value == 'logout') {
+                          _handleLogout(context);
+                        }
+                      },
+                      itemBuilder:
+                          (BuildContext context) => [
+                            const PopupMenuItem<String>(
+                              value: 'edit_profile',
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.edit,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
+                                  SizedBox(width: 12),
+                                  Text(
+                                    'Edit Profile',
+                                    style: TextStyle(color: Colors.white),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const PopupMenuItem<String>(
+                              value: 'settings',
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.settings,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
+                                  SizedBox(width: 12),
+                                  Text(
+                                    'Settings',
+                                    style: TextStyle(color: Colors.white),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const PopupMenuItem<String>(
+                              value: 'logout',
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.logout,
+                                    color: Colors.red,
+                                    size: 20,
+                                  ),
+                                  SizedBox(width: 12),
+                                  Text(
+                                    'Logout',
+                                    style: TextStyle(color: Colors.red),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                    ),
+                  ],
                   flexibleSpace: FlexibleSpaceBar(
                     background: Container(
                       decoration: BoxDecoration(
@@ -1213,9 +1820,24 @@ class ProfileScreen extends StatelessWidget {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           children: [
-                            _buildStatColumn('Followers', '1.2K'),
-                            _buildStatColumn('Following', '450'),
-                            _buildStatColumn('Posts', '89'),
+                            _buildStatColumn(
+                              'Followers',
+                              _isLoadingStats
+                                  ? '...'
+                                  : _formatCount(_followersCount),
+                            ),
+                            _buildStatColumn(
+                              'Following',
+                              _isLoadingStats
+                                  ? '...'
+                                  : _formatCount(_followingCount),
+                            ),
+                            _buildStatColumn(
+                              'Posts',
+                              _isLoadingStats
+                                  ? '...'
+                                  : _formatCount(_postsCount),
+                            ),
                           ],
                         ),
                         const SizedBox(height: 24),
@@ -1254,95 +1876,6 @@ class ProfileScreen extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 32),
-                        _buildProfileButton(
-                          icon: Icons.edit,
-                          title: 'Edit Profile',
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder:
-                                    (context) =>
-                                        const ArtistEditProfileScreen(),
-                              ),
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        _buildProfileButton(
-                          icon: Icons.settings,
-                          title: 'Settings',
-                          onTap: () {},
-                        ),
-                        const SizedBox(height: 12),
-                        _buildProfileButton(
-                          icon: Icons.help_outline,
-                          title: 'Help & Support',
-                          onTap: () {},
-                        ),
-                        const SizedBox(height: 12),
-                        _buildProfileButton(
-                          icon: Icons.logout,
-                          title: 'Logout',
-                          onTap: () async {
-                            // Show confirmation dialog
-                            final shouldLogout = await showDialog<bool>(
-                              context: context,
-                              builder: (BuildContext context) {
-                                return AlertDialog(
-                                  backgroundColor: Colors.grey[900],
-                                  title: const Text(
-                                    'Logout',
-                                    style: TextStyle(color: Colors.white),
-                                  ),
-                                  content: const Text(
-                                    'Are you sure you want to logout?',
-                                    style: TextStyle(color: Colors.white70),
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed:
-                                          () =>
-                                              Navigator.of(context).pop(false),
-                                      child: const Text(
-                                        'Cancel',
-                                        style: TextStyle(color: Colors.grey),
-                                      ),
-                                    ),
-                                    TextButton(
-                                      onPressed:
-                                          () => Navigator.of(context).pop(true),
-                                      child: const Text(
-                                        'Logout',
-                                        style: TextStyle(
-                                          color: Color(0xFF00B4FF),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              },
-                            );
-
-                            if (shouldLogout == true) {
-                              // Sign out from Firebase
-                              await FirebaseAuth.instance.signOut();
-
-                              // Navigate to ChooseScreen and remove all previous routes
-                              if (context.mounted) {
-                                Navigator.pushAndRemoveUntil(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => const ChooseScreen(),
-                                  ),
-                                  (route) =>
-                                      false, // Remove all previous routes
-                                );
-                              }
-                            }
-                          },
-                        ),
-                        const SizedBox(height: 32),
                         // Artist Posts Section
                         const Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1367,78 +1900,141 @@ class ProfileScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 16),
                         // Posts Grid
-                        GridView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          gridDelegate:
-                              const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 3,
-                                crossAxisSpacing: 8,
-                                mainAxisSpacing: 8,
-                                childAspectRatio: 1,
-                              ),
-                          itemCount: 9,
-                          itemBuilder: (context, index) {
-                            return Container(
-                              decoration: BoxDecoration(
-                                color: Colors.grey[800],
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Stack(
-                                fit: StackFit.expand,
-                                children: [
-                                  // Placeholder for post image/video
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: Container(
-                                      color: Colors.grey[700],
-                                      child: const Icon(
-                                        Icons.play_circle_outline,
-                                        color: Colors.white,
-                                        size: 40,
-                                      ),
-                                    ),
+                        _isLoadingVideos
+                            ? const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(24.0),
+                                child: CircularProgressIndicator(
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Color(0xFF00B4FF),
                                   ),
-                                  // Overlay with engagement info
-                                  Positioned(
-                                    bottom: 4,
-                                    left: 4,
-                                    right: 4,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 4,
+                                ),
+                              ),
+                            )
+                            : _artistVideos.isEmpty
+                            ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(24.0),
+                                child: Text(
+                                  'No videos yet',
+                                  style: TextStyle(
+                                    color: Colors.grey[400],
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ),
+                            )
+                            : GridView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              gridDelegate:
+                                  const SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: 3,
+                                    crossAxisSpacing: 8,
+                                    mainAxisSpacing: 8,
+                                    childAspectRatio: 1,
+                                  ),
+                              itemCount:
+                                  _artistVideos.length > 9
+                                      ? 9
+                                      : _artistVideos.length,
+                              itemBuilder: (context, index) {
+                                final video = _artistVideos[index];
+                                final videoUrl =
+                                    video['videoUrl'] as String? ?? '';
+                                final views = video['views'] as int? ?? 0;
+
+                                return GestureDetector(
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder:
+                                            (context) =>
+                                                const AllArtistPostScreen(
+                                                  showBackButton: true,
+                                                ),
                                       ),
-                                      decoration: BoxDecoration(
-                                        color: Colors.black.withOpacity(0.6),
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
+                                    );
+                                  },
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: Stack(
+                                        fit: StackFit.expand,
                                         children: [
-                                          const Icon(
-                                            Icons.play_arrow,
-                                            color: Colors.white,
-                                            size: 12,
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            '${(index + 1) * 25}',
-                                            style: const TextStyle(
+                                          // Video Thumbnail
+                                          if (videoUrl.isNotEmpty)
+                                            _VideoThumbnailWidget(
+                                              videoUrl: videoUrl,
+                                            )
+                                          else
+                                            Container(
+                                              color: Colors.grey[800],
+                                              child: const Icon(
+                                                Icons.play_circle_outline,
+                                                color: Colors.white,
+                                                size: 40,
+                                              ),
+                                            ),
+                                          // Play Icon Overlay
+                                          const Center(
+                                            child: Icon(
+                                              Icons.play_circle_filled,
                                               color: Colors.white,
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w600,
+                                              size: 40,
+                                            ),
+                                          ),
+                                          // Overlay with views info
+                                          Positioned(
+                                            bottom: 4,
+                                            left: 4,
+                                            right: 4,
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 6,
+                                                    vertical: 4,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: Colors.black.withOpacity(
+                                                  0.6,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  const Icon(
+                                                    Icons.play_arrow,
+                                                    color: Colors.white,
+                                                    size: 12,
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    _formatCount(views),
+                                                    style: const TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: 10,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
                                             ),
                                           ),
                                         ],
                                       ),
                                     ),
                                   ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
+                                );
+                              },
+                            ),
                       ],
                     ),
                   ),
@@ -1476,32 +2072,88 @@ class ProfileScreen extends StatelessWidget {
       ),
     );
   }
+}
 
-  Widget _buildProfileButton({
-    required IconData icon,
-    required String title,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.grey[900],
-          borderRadius: BorderRadius.circular(12),
+// Video Thumbnail Widget
+class _VideoThumbnailWidget extends StatefulWidget {
+  final String videoUrl;
+
+  const _VideoThumbnailWidget({required this.videoUrl});
+
+  @override
+  State<_VideoThumbnailWidget> createState() => _VideoThumbnailWidgetState();
+}
+
+class _VideoThumbnailWidgetState extends State<_VideoThumbnailWidget> {
+  VideoPlayerController? _controller;
+  bool _isInitialized = false;
+  bool _hasError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeVideo();
+  }
+
+  Future<void> _initializeVideo() async {
+    try {
+      _controller = VideoPlayerController.networkUrl(
+        Uri.parse(widget.videoUrl),
+      );
+      await _controller!.initialize();
+      // Seek to a frame (e.g., 1 second) to get a good thumbnail
+      await _controller!.seekTo(const Duration(seconds: 1));
+      // Pause the video
+      await _controller!.pause();
+
+      if (mounted) {
+        setState(() {
+          _isInitialized = true;
+        });
+      }
+    } catch (e) {
+      print('Error initializing video thumbnail: $e');
+      if (mounted) {
+        setState(() {
+          _hasError = true;
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_hasError) {
+      return Container(
+        color: Colors.grey[800],
+        child: const Icon(Icons.videocam_off, color: Colors.white, size: 40),
+      );
+    }
+
+    if (!_isInitialized || _controller == null) {
+      return Container(
+        color: Colors.grey[800],
+        child: const Center(
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00B4FF)),
+          ),
         ),
-        child: Row(
-          children: [
-            Icon(icon, color: Colors.white),
-            const SizedBox(width: 16),
-            Text(
-              title,
-              style: const TextStyle(color: Colors.white, fontSize: 16),
-            ),
-            const Spacer(),
-            Icon(Icons.chevron_right, color: Colors.grey[400]),
-          ],
-        ),
+      );
+    }
+
+    return FittedBox(
+      fit: BoxFit.cover,
+      child: SizedBox(
+        width: _controller!.value.size.width,
+        height: _controller!.value.size.height,
+        child: VideoPlayer(_controller!),
       ),
     );
   }
