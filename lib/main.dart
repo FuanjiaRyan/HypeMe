@@ -71,7 +71,7 @@ class AuthWrapper extends StatelessWidget {
                       valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00B4FF)),
                     ),
                   ),
-                );
+                ); 
               }
 
               if (combinedSnapshot.hasData) {

@@ -774,7 +774,7 @@ class UserWalletScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         const Text(
-                          'GHS',
+                          'FCFA',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 18,
@@ -818,7 +818,7 @@ class UserWalletScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 8),
                           const Text(
-                            'GHS 8,450.00',
+                            'FCFA 8,450.00',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 18,
@@ -849,7 +849,7 @@ class UserWalletScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 8),
                           const Text(
-                            'GHS 500.00',
+                            'FCFA 500.00',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 18,
@@ -1023,7 +1023,7 @@ class UserWalletScreen extends StatelessWidget {
                 iconColor: Colors.green,
                 title: 'Payout',
                 date: 'Oct 28, 2023',
-                amount: '- GHS 500.00',
+                amount: '- FCFA 500.00',
                 status: 'Completed',
                 statusColor: Colors.green,
               ),
@@ -1033,7 +1033,7 @@ class UserWalletScreen extends StatelessWidget {
                 iconColor: Colors.yellow,
                 title: 'Payout',
                 date: 'Oct 15, 2023',
-                amount: '- GHS 250.50',
+                amount: '- FCFA 250.50',
                 status: 'Processing',
                 statusColor: Colors.yellow,
               ),
@@ -1043,7 +1043,7 @@ class UserWalletScreen extends StatelessWidget {
                 iconColor: Colors.green,
                 title: 'Payout',
                 date: 'Sep 30, 2023',
-                amount: '- GHS 1,200.00',
+                amount: '- FCFA 1,200.00',
                 status: 'Completed',
                 statusColor: Colors.green,
               ),

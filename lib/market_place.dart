@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'checkout_screen.dart';
 
 class MarketPlaceScreen extends StatefulWidget {
@@ -17,12 +18,44 @@ class _MarketPlaceScreenState extends State<MarketPlaceScreen> {
   List<Map<String, dynamic>> _nfts = [];
   List<Map<String, dynamic>> _filteredNfts = [];
   bool _isLoading = true;
+  bool _isArtist = false;
 
   @override
   void initState() {
     super.initState();
+    _checkIfArtist();
     _loadNFTs();
     _searchController.addListener(_filterNFTs);
+  }
+
+  Future<void> _checkIfArtist() async {
+    final User? user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      setState(() {
+        _isArtist = false;
+      });
+      return;
+    }
+
+    try {
+      final artistDoc = await FirebaseFirestore.instance
+          .collection('artist')
+          .doc(user.uid)
+          .get();
+
+      if (mounted) {
+        setState(() {
+          _isArtist = artistDoc.exists;
+        });
+      }
+    } catch (e) {
+      print('Error checking if user is artist: $e');
+      if (mounted) {
+        setState(() {
+          _isArtist = false;
+        });
+      }
+    }
   }
 
   @override
@@ -220,6 +253,15 @@ class _MarketPlaceScreenState extends State<MarketPlaceScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         elevation: 0,
+        actions: _isArtist
+            ? [
+                IconButton(
+                  icon: const Icon(Icons.add_circle_outline, color: Color(0xFF00B4FF)),
+                  onPressed: _showListNftDialog,
+                  tooltip: 'List New NFT',
+                ),
+              ]
+            : null,
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -409,33 +451,25 @@ class _MarketPlaceScreenState extends State<MarketPlaceScreen> {
                           ),
                         ),
                       )
-                  : _filteredNfts.isEmpty
+                        : _filteredNfts.isEmpty
                       ? Center(
                           child: Padding(
-                            padding: const EdgeInsets.all(8.0),
+                            padding: const EdgeInsets.all(32.0),
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Image.asset(
-                                  'assets/icons/nft.jpeg',
-                                  fit: BoxFit.contain,
-                                  width: 300,
-                                  height: 300,
-                                  errorBuilder: (context, error, stackTrace) {
-                                    return Container(
-                                      width: 120,
-                                      height: 120,
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey[800],
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: Icon(
-                                        Icons.store_outlined,
-                                        size: 60,
-                                        color: Colors.grey[400],
-                                      ),
-                                    );
-                                  },
+                                Container(
+                                  width: 120,
+                                  height: 120,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[800],
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    Icons.store_outlined,
+                                    size: 60,
+                                    color: Colors.grey[400],
+                                  ),
                                 ),
                                 const SizedBox(height: 24),
                                 const Text(
@@ -448,11 +482,28 @@ class _MarketPlaceScreenState extends State<MarketPlaceScreen> {
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  'Check back later for exclusive PNFTs from your favorite artists',
+                                  'Be the first to list a PNFT!',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     color: Colors.grey[400],
                                     fontSize: 14,
+                                  ),
+                                ),
+                                const SizedBox(height: 24),
+                                ElevatedButton.icon(
+                                  onPressed: _showListNftDialog,
+                                  icon: const Icon(Icons.add),
+                                  label: const Text('List NFT'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF00B4FF),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 24,
+                                      vertical: 12,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
                                   ),
                                 ),
                               ],
@@ -467,7 +518,7 @@ class _MarketPlaceScreenState extends State<MarketPlaceScreen> {
                               crossAxisCount: 2,
                               crossAxisSpacing: 16.0,
                               mainAxisSpacing: 16.0,
-                              childAspectRatio: 0.62,
+                              childAspectRatio: 0.75, // Adjusted for better proportions
                             ),
                             itemCount: _filteredNfts.length,
                             itemBuilder: (context, index) {
@@ -513,171 +564,275 @@ class _MarketPlaceScreenState extends State<MarketPlaceScreen> {
     final price = nft['price'] as String? ?? '0.00 ETH';
     final thumbnailUrl = nft['thumbnailUrl'] as String? ?? '';
 
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E1E1E),
         borderRadius: BorderRadius.circular(16.0),
-        side: const BorderSide(color: Color(0xFF404040), width: 1.0),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      color: Colors.grey[800],
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // NFT Image
-          ClipRRect(
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(16.0),
-              topRight: Radius.circular(16.0),
-            ),
-            child: AspectRatio(
-              aspectRatio: 0.75,
-              child: thumbnailUrl.isNotEmpty
-                  ? CachedNetworkImage(
-                      imageUrl: thumbnailUrl,
-                      fit: BoxFit.cover,
-                      placeholder: (context, url) => Container(
-                        color: Colors.grey[700],
-                        child: const Center(
-                          child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Color(0xFF00B4FF),
-                            ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => CheckoutScreen(pnft: nft),
+              ),
+            );
+          },
+          borderRadius: BorderRadius.circular(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // NFT Image
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16.0),
+                    topRight: Radius.circular(16.0),
+                  ),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      thumbnailUrl.isNotEmpty
+                          ? CachedNetworkImage(
+                              imageUrl: thumbnailUrl,
+                              fit: BoxFit.cover,
+                              placeholder: (context, url) => Container(
+                                color: Colors.grey[800],
+                                child: const Center(
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Color(0xFF00B4FF),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              errorWidget: (context, url, error) => _buildGradientPlaceholder(),
+                            )
+                          : _buildGradientPlaceholder(),
+                      
+                      // Type Badge
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.6),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.white.withOpacity(0.2)),
                           ),
-                        ),
-                      ),
-                      errorWidget: (context, url, error) => Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              Colors.blue[300]!,
-                              Colors.purple[300]!,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                type == 'Video' ? Icons.videocam : Icons.music_note,
+                                color: Colors.white,
+                                size: 12,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                type,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ],
                           ),
                         ),
-                        child: const Icon(
-                          Icons.music_note,
-                          color: Colors.white,
-                          size: 50,
-                        ),
                       ),
-                    )
-                  : Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Colors.blue[300]!,
-                            Colors.purple[300]!,
-                          ],
-                        ),
-                      ),
-                      child: const Icon(
-                        Icons.music_note,
-                        color: Colors.white,
-                        size: 50,
-                      ),
-                    ),
-            ),
-          ),
-          // Padding for text content
-          Padding(
-            padding: const EdgeInsets.all(10.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Title
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    ],
                   ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
                 ),
-                // Subtitle (Type)
-                if (type.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4.0),
-                    child: Text(
-                      '($type)',
+              ),
+              // Content
+              Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      artist,
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.white.withOpacity(0.7),
+                        color: Colors.white.withOpacity(0.6),
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                // Creator
-                Padding(
-                  padding: const EdgeInsets.only(top: 4.0),
-                  child: Text(
-                    'By $artist',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.white.withOpacity(0.5),
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                // Price
-                Text(
-                  'Price:',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.white.withOpacity(0.6),
-                  ),
-                ),
-                Text(
-                  price,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF4EEF6A), // Bright green color
-                  ),
-                ),
-                const SizedBox(height: 12),
-                // View Details Button
-                SizedBox(
-                  width: double.infinity,
-                  height: 40,
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => CheckoutScreen(pnft: nft),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          price,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF00B4FF),
+                          ),
                         ),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF4D49E3),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10.0),
-                      ),
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                        Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF00B4FF).withOpacity(0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.arrow_forward,
+                            color: Color(0xFF00B4FF),
+                            size: 14,
+                          ),
+                        ),
+                      ],
                     ),
-                    icon: const Icon(
-                      Icons.visibility,
-                      color: Colors.white,
-                      size: 18,
-                    ),
-                    label: const Text(
-                      'View Details',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGradientPlaceholder() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF00B4FF).withOpacity(0.8),
+            const Color(0xFF7B2CBF).withOpacity(0.8),
+          ],
+        ),
+      ),
+      child: const Icon(
+        Icons.image_not_supported_outlined,
+        color: Colors.white,
+        size: 40,
+      ),
+    );
+  }
+
+
+  void _showListNftDialog() {
+    final titleController = TextEditingController();
+    final priceController = TextEditingController();
+    String selectedType = 'Audio';
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          backgroundColor: Colors.grey[900],
+          title: const Text('List New NFT', style: TextStyle(color: Colors.white)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleController,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: 'Title',
+                  labelStyle: TextStyle(color: Colors.grey),
+                  enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.grey)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: priceController,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: 'Price (ETH)',
+                  labelStyle: TextStyle(color: Colors.grey),
+                  enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.grey)),
+                ),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              ),
+              const SizedBox(height: 16),
+              DropdownButton<String>(
+                value: selectedType,
+                dropdownColor: Colors.grey[800],
+                style: const TextStyle(color: Colors.white),
+                isExpanded: true,
+                items: ['Audio', 'Video'].map((String value) {
+                  return DropdownMenuItem<String>(
+                    value: value,
+                    child: Text(value),
+                  );
+                }).toList(),
+                onChanged: (newValue) {
+                  setState(() {
+                    selectedType = newValue!;
+                  });
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (titleController.text.isNotEmpty && priceController.text.isNotEmpty) {
+                  try {
+                    final newNft = {
+                      'title': titleController.text,
+                      'price': '${priceController.text} ETH',
+                      'type': selectedType,
+                      'artist': 'Current User', // Replace with actual user name
+                      'createdAt': FieldValue.serverTimestamp(),
+                      'thumbnailUrl': '', // Placeholder
+                    };
+
+                    await FirebaseFirestore.instance.collection('marketplace').add(newNft);
+                    
+                    if (mounted) {
+                      Navigator.pop(context);
+                      _loadNFTs(); // Reload list
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('NFT Listed Successfully!'), backgroundColor: Colors.green),
+                      );
+                    }
+                  } catch (e) {
+                    print('Error listing NFT: $e');
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Failed to list NFT'), backgroundColor: Colors.red),
+                    );
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00B4FF)),
+              child: const Text('List', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
       ),
     );
   }

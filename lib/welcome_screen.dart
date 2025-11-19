@@ -33,17 +33,18 @@ class WelcomeScreen extends StatelessWidget {
               const SizedBox(height: 30),
               // HypeLink text with gradient
               ShaderMask(
-                shaderCallback: (bounds) => const LinearGradient(
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                  colors: [
-                    Color(0xFF00B4FF), // Blue
-                    Color(0xFF7B2CBF), // Purple
-                    Color(0xFFE91E63), // Pink
-                    Color(0xFFFF6B35), // Orange-red
-                  ],
-                  stops: [0.0, 0.33, 0.66, 1.0],
-                ).createShader(bounds),
+                shaderCallback:
+                    (bounds) => const LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [
+                        Color(0xFF00B4FF), // Blue
+                        Color(0xFF7B2CBF), // Purple
+                        Color(0xFFE91E63), // Pink
+                        Color(0xFFFF6B35), // Orange-red
+                      ],
+                      stops: [0.0, 0.33, 0.66, 1.0],
+                    ).createShader(bounds),
                 child: const Text(
                   'HypeLink',
                   style: TextStyle(
@@ -130,4 +131,3 @@ class WelcomeScreen extends StatelessWidget {
     );
   }
 }
-

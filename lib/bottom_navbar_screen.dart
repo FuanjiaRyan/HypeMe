@@ -10,6 +10,7 @@ import 'all_artist_post.dart';
 import 'choose_screen.dart';
 import 'artist_edit_profile_screen.dart';
 import 'ai_screen.dart';
+import 'market_place.dart';
 
 class BottomNavbarScreen extends StatefulWidget {
   const BottomNavbarScreen({super.key});
@@ -1548,7 +1549,7 @@ class WalletScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      '\$1,250.00',
+                      'FCFA 1,250.00',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 36,
@@ -1571,7 +1572,7 @@ class WalletScreen extends StatelessWidget {
                             ),
                             const SizedBox(height: 4),
                             const Text(
-                              '\$1,250.00',
+                              'FCFA 1,250.00',
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 16,
@@ -1592,7 +1593,7 @@ class WalletScreen extends StatelessWidget {
                             ),
                             const SizedBox(height: 4),
                             const Text(
-                              '\$0.00',
+                              'FCFA 0.00',
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 16,
@@ -1621,6 +1622,57 @@ class WalletScreen extends StatelessWidget {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              // Market Place button
+              InkWell(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const MarketPlaceScreen(),
+                    ),
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[900],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 50,
+                        height: 50,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF00B4FF),
+                          borderRadius: BorderRadius.circular(25),
+                        ),
+                        child: const Icon(
+                          Icons.store,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      const Expanded(
+                        child: Text(
+                          'Market Place',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      Icon(
+                        Icons.chevron_right,
+                        color: Colors.grey[400],
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -1691,7 +1743,7 @@ class WalletScreen extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          '${isPositive ? '+' : '-'}\$${(index + 1) * 25}.00',
+                          '${isPositive ? '+' : '-'}FCFA ${(index + 1) * 25}.00',
                           style: TextStyle(
                             color: isPositive ? Colors.green : Colors.red,
                             fontSize: 16,
@@ -1783,7 +1835,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       print('Error loading profile stats: $e');
       if (mounted) {
         setState(() {
-          _isLoadingStats = false;
+          _isLoadingStats = false; 
         });
       }
     }
